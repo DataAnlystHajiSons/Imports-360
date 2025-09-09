@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Imports 360 - Forecasts</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+    let products = [];
+
+    function showMessage(id, message, isError = false) {
+        const element = document.getElementById(id);
+        element.textContent = message;
+        element.className = 'message ' + (isError ? 'error-message' : 'success-message');
+        element.style.display = 'block';
+    }
+
+    function getEmojiForProduct(productName) {
+      const lowerCaseName = productName.toLowerCase().split('-')[0].trim();
+      if (lowerCaseName.includes('cauliflower')) return '🥦';
+      if (lowerCaseName.includes('carrot')) return '🥕';
+      if (lowerCaseName.includes('tomato')) return '🍅';
+      if (lowerCaseName.includes('corn')) return '🌽';
+      if (lowerCaseName.includes('lettuce')) return '🥬';
+      if (lowerCaseName.includes('bitter gourd')) return '🥒';
+      if (lowerCaseName.includes('beans')) return '🌰';
+      return '🌱'; // Default icon
+    }
+
+    function renderScatterChart(forecasts) {
+      const chartContainer = document.querySelector("#forecast-chart");
+      chartContainer.innerHTML = ''; // Clear previous chart
+
+      if (!forecasts || forecasts.length === 0) {
+        chartContainer.innerHTML = '<div style="text-align: center; padding: 50px; color: var(--text-secondary-color); font-size: 16px;">No forecast data available to display.</div>';
+        return;
+      }
+
+      const groupedData = forecasts.reduce((acc, forecast) => {
+        const productName = forecast.product_variety ? forecast.product_variety.product_name : 'Unknown';
+        if (!acc[productName]) {
+          acc[productName] = [];
+        }
+        acc[productName].push({
+          x: new Date(forecast.date_of_sowing).getTime(),
+          y: forecast.forecast_qty,
+          variety: forecast.product_variety ? forecast.product_variety.variety_name : 'N/A'
+        });
+        return acc;
+      }, {});
+
+      const series = Object.keys(groupedData).map(productName => {
+        return {
+          name: productName,
+          data: groupedData[productName]
+        };
+      });
+
+      const seriesColors = ['#008FFB', '#00E396', '#FEB019', '#FF4560', '#775DD0', '#546E7A'];
+
+      const options = {
+        series: series,
+        colors: seriesColors,
+        chart: {
+          height: 450,
+          type: 'scatter',
+          zoom: { enabled: true, type: 'xy' },
+          toolbar: { show: true },
+          background: 'var(--primary-color)'
+        },
+        markers: {
+          size: 20,
+          fillOpacity: 0,
+          strokeOpacity: 0,
+          hover: {
+            size: 20,
+            fillOpacity: 0.1,
+            strokeOpacity: 0.1,
+          }
+        },
+        dataLabels: {
+          enabled: true,
+          formatter: (val, opts) => {
+            const productName = opts.w.globals.seriesNames[opts.seriesIndex];
+            return getEmojiForProduct(productName);
+          },
+          style: {
+            fontSize: '20px',
+          },
+          offsetY: 10,
+          offsetX: 0
+        },
+        title: {
+          text: 'Sowing Schedule & Quantity',
+          align: 'left',
+          style: { 
+            color: 'var(--text-primary-color)',
+            fontSize: '18px',
+            fontWeight: 'bold'
+          }
+        },
+        grid: {
+          borderColor: 'var(--secondary-color)',
+          xaxis: { lines: { show: true } },
+          yaxis: { lines: { show: true } },
+        },
+        xaxis: {
+          type: 'datetime',
+          title: {
+            text: 'Sowing Date',
+            style: { color: 'var(--text-secondary-color)', fontWeight: 'normal' }
+          },
+          labels: {
+            datetimeUTC: false,
+            style: {
+              colors: 'var(--text-secondary-color)'
+            },
+            formatter: function(value, timestamp) {
+              return new Date(timestamp).toLocaleDateString();
+            }
+          }
+        },
+        yaxis: {
+          min: 0,
+          title: {
+            text: 'Forecast Quantity',
+            style: { color: 'var(--text-secondary-color)', fontWeight: 'normal' }
+          },
+          labels: {
+            formatter: (value) => { return value.toLocaleString(); },
+            style: {
+              colors: 'var(--text-secondary-color)'
+            }
+          }
+        },
+        tooltip: {
+          theme: 'dark',
+          custom: function({seriesIndex, dataPointIndex, w}) {
+            const seriesName = w.globals.seriesNames[seriesIndex];
+            const dataPoint = w.globals.initialSeries[seriesIndex].data[dataPointIndex];
+            const date = new Date(dataPoint.x).toLocaleDateString();
+            const qty = dataPoint.y;
+            const variety = dataPoint.variety;
+
+            return `<div class="apexcharts-tooltip-title" style="background: ${seriesColors[seriesIndex]};">
+                      ${seriesName} - ${variety}
+                    </div>
+                    <div class="apexcharts-tooltip-series-group" style="padding: 10px;">
+                      <div class="apexcharts-tooltip-text">
+                        <span class="apexcharts-tooltip-text-label">Sowing Date: </span>
+                        <span class="apexcharts-tooltip-text-value">${date}</span>
+                      </div>
+                      <div class="apexcharts-tooltip-text">
+                        <span class="apexcharts-tooltip-text-label">Forecast Qty: </span>
+                        <span class="apexcharts-tooltip-text-value">${qty.toLocaleString()}</span>
+                      </div>
+                    </div>`;
+          }
+        },
+        legend: {
+          position: 'top',
+          horizontalAlign: 'right',
+          labels: {
+            colors: 'var(--text-primary-color)',
+            useSeriesColors: true
+          },
+          markers: {
+            width: 12,
+            height: 12,
+            radius: 12,
+          }
+        },
+        noData: {
+          text: 'No forecast data available to display.',
+          align: 'center',
+          verticalAlign: 'middle',
+          style: {
+            color: 'var(--text-secondary-color)',
+            fontSize: '16px'
+          }
+        }
+      };
+
+      const chart = new ApexCharts(chartContainer, options);
+      chart.render();
+    }
+
+    async function loadForecasts() {
+      const { data, error } = await supabase
+        .from('forecast')
+        .select(`*, product_variety ( product_name, variety_name )`)
+        .order('date_of_sowing', { ascending: false });
+
+      if (error) {
+        document.getElementById("forecasts-list").innerHTML = `<p class="error-message">Error loading forecasts: ${error.message}</p>`;
+        return;
+      }
+
+      renderScatterChart(data);
+
+      const tableBody = document.getElementById("forecasts-table-body");
+      let html = "";
+      data.forEach(item => {
+        const productName = item.product_variety ? `${item.product_variety.product_name} - ${item.product_variety.variety_name}` : 'N/A';
+        const alertSentClass = item.dos_alert_sent ? 'alert-sent' : '';
+        html += `<tr>
+          <td class="${alertSentClass}">${productName}</td>
+          <td class="${alertSentClass}">${item.year}</td>
+          <td class="${alertSentClass}">${item.forecast_qty}</td>
+          <td class="${alertSentClass}">${new Date(item.date_of_sowing).toLocaleDateString()}</td>
+          <td class="${alertSentClass}">${item.dos_alert_sent ? 'Yes' : 'No'}</td>
+          <td class="${alertSentClass}"><button class="button-secondary" onclick='openForecastModal(${JSON.stringify(item)})'>Edit</button></td>
+        </tr>`;
+      });
+      tableBody.innerHTML = html;
+    }
+
+    async function openForecastModal(forecast = null) {
+      showMessage('modal-message', '');
+      const form = document.getElementById('forecast-form');
+      form.reset();
+      document.getElementById('forecast-id').value = forecast ? forecast.id : '';
+
+      const productSelect = document.getElementById('product_variety_id');
+      productSelect.innerHTML = '<option value="">Select a Product</option>';
+      products.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.product_name} - ${p.variety_name}`;
+        productSelect.appendChild(option);
+      });
+
+      if (forecast) {
+        document.getElementById('modal-title').textContent = 'Edit Forecast';
+        document.getElementById('product_variety_id').value = forecast.product_variety_id;
+        document.getElementById('year').value = forecast.year;
+        document.getElementById('forecast_qty').value = forecast.forecast_qty;
+        document.getElementById('date_of_sowing').value = forecast.date_of_sowing;
+      } else {
+        document.getElementById('modal-title').textContent = 'Create New Forecast';
+      }
+
+      document.getElementById('forecast-modal').style.display = 'flex';
+    }
+
+    async function saveForecast() {
+      const id = document.getElementById('forecast-id').value;
+      const forecastData = {
+        product_variety_id: document.getElementById('product_variety_id').value,
+        year: document.getElementById('year').value,
+        forecast_qty: document.getElementById('forecast_qty').value,
+        date_of_sowing: document.getElementById('date_of_sowing').value,
+      };
+
+      let query;
+      if (id) {
+        query = supabase.from('forecast').update(forecastData).eq('id', id);
+      } else {
+        query = supabase.from('forecast').insert(forecastData);
+      }
+
+      const { error } = await query;
+      if (error) {
+        showMessage('modal-message', `Error saving forecast: ${error.message}`, true);
+      } else {
+        closeModal();
+        loadForecasts();
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('forecast-modal').style.display = 'none';
+    }
+
+    window.openForecastModal = openForecastModal;
+    window.saveForecast = saveForecast;
+    window.closeModal = closeModal;
+
+    window.onload = async () => {
+      const loader = document.getElementById("loader");
+      loader.style.display = "block";
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+          window.location.href = 'login.html';
+          return;
+      }
+
+      const { data: productData, error: productError } = await supabase.from('product_variety').select('*');
+      if (productError) {
+        console.error("Failed to load products for form");
+      } else {
+        products = productData;
+      }
+
+      await loadForecasts();
+      loader.style.display = "none";
+    };
+  </script>
+</head>
+<body>
+  <div class="loader-overlay" id="loader">
+    <div class="loader">
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+    </div>
+  </div>
+  <aside class="sidebar">
+     <div class="sidebar-header">
+      <img src="https://i.postimg.cc/j5K3DCyc/20250826-1802-Imports-360-Logo-simple-compose-01k3k7grx1f2fsmtvdcvwbx54s.png" alt="Logo" class="sidebar-logo">
+      <button class="sidebar-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <ul>
+        <li>
+          <a href="admin-dashboard.html" class="nav-link">
+            <i class="fas fa-home icon"></i>
+            <span class="text">Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="forecast.html" class="nav-link active">
+            <i class="fas fa-bullhorn icon"></i>
+            <span class="text">Forecasts</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu">
+            <i class="fas fa-box icon"></i>
+            <span class="text">Shipments</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu">
+            <li><a href="shipment_tracker.html" class="nav-link"><span class="text">Shipment Tracker</span></a></li>
+            <li><a href="shipment-details.html" class="nav-link"><span class="text">All Shipments</span></a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="product-details.html" class="nav-link">
+            <i class="fas fa-tags icon"></i>
+            <span class="text">Products</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-details.html" class="nav-link">
+            <i class="fas fa-truck icon"></i>
+            <span class="text">Suppliers</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-shipment-responses.html" class="nav-link">
+            <i class="fas fa-inbox icon"></i>
+            <span class="text">Supplier Responses</span>
+          </a>
+        </li>
+        <li>
+          <a href="bank-details.html" class="nav-link">
+            <i class="fas fa-university icon"></i>
+            <span class="text">Banks</span>
+          </a>
+        </li>
+        <li>
+          <a href="clearing-agent-details.html" class="nav-link">
+            <i class="fas fa-user-shield icon"></i>
+            <span class="text">Clearing Agents</span>
+          </a>
+        </li>
+        <li>
+          <a href="warehouse-details.html" class="nav-link">
+            <i class="fas fa-warehouse icon"></i>
+            <span class="text">Warehouses</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu">
+            <i class="fas fa-truck-ramp-box icon"></i>
+            <span class="text">Freight</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu open">
+            <li><a href="send-freight-queries.html" class="nav-link"><span class="text">Send Freight Queries</span></a></li>
+            <li><a href="freight-query-response.html" class="nav-link"><span class="text">Freight Query Response</span></a></li>
+            <li><a href="manage-freight-queries.html" class="nav-link"><span class="text">Manage Freight Queries</span></a></li>
+            <li><a href="award-shipment.html" class="nav-link"><span class="text">Award Shipment</span></a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-content">
+    <div class="page-header">
+      <h1>Forecasts</h1>
+      <button onclick="openForecastModal()">Create New Forecast</button>
+    </div>
+
+    <div class="chart-panel">
+      <div id="forecast-chart"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-body">
+        <div id="forecasts-list" class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Year</th>
+                <th>Forecast Qty</th>
+                <th>Date of Sowing</th>
+                <th>Alert Sent?</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="forecasts-table-body">
+              <!-- Data will be loaded here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="forecast-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button" onclick="closeModal()">&times;</span>
+      <h2 id="modal-title">Create New Forecast</h2>
+      <div id="modal-message"></div>
+      <form id="forecast-form" onsubmit="event.preventDefault(); saveForecast();">
+        <input type="hidden" id="forecast-id">
+        <div>
+          <label for="product_variety_id">Product</label>
+          <select id="product_variety_id" required></select>
+        </div>
+        <div>
+          <label for="year">Year</label>
+          <input type="number" id="year" placeholder="e.g., 2025" required>
+        </div>
+        <div>
+          <label for="forecast_qty">Forecast Quantity</label>
+          <input type="number" id="forecast_qty" required>
+        </div>
+        <div>
+          <label for="date_of_sowing">Date of Sowing</label>
+          <input type="date" id="date_of_sowing" required>
+        </div>
+        <div class="button-container">
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+    // Standard sidebar and responsive logic
+    document.addEventListener('DOMContentLoaded', () => {
+      const sidebar = document.querySelector('.sidebar');
+      const sidebarToggle = document.querySelector('.sidebar-toggle');
+      const navLinks = document.querySelectorAll('.nav-link');
+      const hasSubmenus = document.querySelectorAll('.has-submenu');
+      const mediaQuery = window.matchMedia('(max-width: 768px)');
+
+      function handleMediaQueryChange(e) {
+        if (e.matches) {
+          sidebar.classList.remove('collapsed');
+          sidebar.classList.remove('open');
+        } else {
+          sidebar.classList.remove('open');
+        }
+      }
+
+      handleMediaQueryChange(mediaQuery);
+      mediaQuery.addListener(handleMediaQueryChange);
+
+      sidebarToggle.addEventListener('click', () => {
+        if (mediaQuery.matches) {
+          sidebar.classList.toggle('open');
+        } else {
+          sidebar.classList.toggle('collapsed');
+        }
+      });
+
+      hasSubmenus.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          const submenu = item.nextElementSibling;
+          if (submenu && submenu.classList.contains('submenu')) {
+            submenu.classList.toggle('open');
+            item.classList.toggle('open');
+          }
+        });
+      });
+
+      const currentPath = window.location.pathname.split('/').pop();
+      navLinks.forEach(link => {
+        if (link.href.split('/').pop() === currentPath) {
+          link.classList.add('active');
+          let parentSubmenu = link.closest('.submenu');
+          if (parentSubmenu) {
+            parentSubmenu.classList.add('open');
+            let parentHasSubmenu = parentSubmenu.previousElementSibling;
+            if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+              parentHasSubmenu.classList.add('open');
+            }
+          }
+        }
+      });
+    });
+</script>
+</body>
+</html>

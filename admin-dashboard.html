@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Imports 360 - Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+    async function loadDashboardStats() {
+      const { count: totalCount, error: totalError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: activeCount, error: activeError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { count: completedCount, error: completedError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed');
+
+      if(totalError || activeError || completedError) {
+        console.error("Error fetching stats:", totalError || activeError || completedError);
+        return;
+      }
+
+      document.getElementById('total-shipments').textContent = totalCount;
+      document.getElementById('active-shipments').textContent = activeCount;
+      document.getElementById('completed-shipments').textContent = completedCount;
+    }
+
+    async function loadShipments(searchTerm = '') {
+      // Query the new view
+      let query = supabase.from("v_shipments_with_details").select(`
+        id, reference_code, current_stage, status, created_at, product_variety
+      `);
+
+      if (searchTerm) {
+        // The .or() filter now correctly references the flat columns from the view
+        const orFilter = [
+            `reference_code.ilike.%${searchTerm}%`,
+            `product_name.ilike.%${searchTerm}%`,
+            `variety_name.ilike.%${searchTerm}%`,
+            `supplier_name.ilike.%${searchTerm}%`
+        ].join(',');
+
+        query = query.or(orFilter);
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
+
+      if (error) {
+        document.getElementById("shipments-table-body").innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      const tableBody = document.getElementById("shipments-table-body");
+      if (data.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center;">No shipments found.</td></tr>`;
+        return;
+      }
+
+      let html = "";
+      data.forEach(s => {
+        // The data structure from the view's product_variety json is the same as before
+        const supplierName = s.product_variety && s.product_variety.supplier ? s.product_variety.supplier.name : 'N/A';
+        html += `<tr>
+          <td><a href="shipment-details.html?id=${s.id}">${s.reference_code}</a></td>
+          <td>${s.product_variety.product_name}</td>
+          <td>${s.product_variety.variety_name}</td>
+          <td>${supplierName}</td>
+          <td>${s.current_stage}</td>
+          <td>${s.status}</td>
+          <td>${new Date(s.created_at).toLocaleDateString()}</td>
+          <td><a href="shipment_tracker.html?id=${s.id}" class='button'>Open</a></td>
+        </tr>`;
+      });
+      tableBody.innerHTML = html;
+    }
+
+    function debounce(func, delay) {
+      let timeout;
+      return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+      };
+    }
+
+    async function logout() {
+        await supabase.auth.signOut();
+        window.location.href = 'login.html';
+    }
+
+    function openCreateShipmentModal() {
+      loadProductVarieties();
+      document.getElementById('create-shipment-modal').style.display = 'block';
+    }
+
+    function closeCreateShipmentModal() {
+      document.getElementById('create-shipment-modal').style.display = 'none';
+    }
+
+    async function loadProductVarieties() {
+      const { data, error } = await supabase
+        .from('product_variety')
+        .select('id, product_name, variety_name');
+
+      if (error) {
+        console.error('Error loading product varieties:', error);
+        return;
+      }
+
+      const select = document.getElementById('product_variety_id');
+      select.innerHTML = '<option value="">Select a product variety</option>';
+      data.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `${item.product_name} - ${item.variety_name}`;
+        select.appendChild(option);
+      });
+    }
+
+    window.logout = logout;
+    window.onload = async () => {
+        const loader = document.getElementById("loader");
+        if (loader) {
+            loader.style.display = "block";
+        }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            window.location.href = 'login.html';
+        } else {
+            const { data: userProfile, error } = await supabase
+              .from('app_user')
+              .select('full_name, role')
+              .eq('id', user.id)
+              .single();
+
+            if (userProfile) {
+              document.getElementById('user-full-name').textContent = userProfile.full_name;
+              const userRoleEmailEl = document.getElementById('user-role-email');
+              userRoleEmailEl.textContent = `${userProfile.role} | ${user.email}`;
+              userRoleEmailEl.title = `${userProfile.role} | ${user.email}`;
+              document.getElementById('welcome-message').textContent = `Welcome back, ${userProfile.full_name}!`;
+            }
+            
+            await Promise.all([
+              loadDashboardStats(),
+              loadShipments()
+            ]);
+        }
+
+        if (loader) {
+            loader.style.display = "none";
+        }
+
+        const searchInput = document.getElementById('shipment-search');
+        searchInput.addEventListener('input', debounce((e) => {
+          loadShipments(e.target.value);
+        }, 300));
+
+        document.getElementById('create-shipment-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const form = event.target;
+          const formData = new FormData(form);
+          const messageDiv = document.getElementById('create-shipment-message');
+
+          const { data: { user } } = await supabase.auth.getUser();
+
+          const reference_code = `SHP-${Date.now()}`;
+
+          const { data, error } = await supabase
+            .from('shipment')
+            .insert({
+              reference_code: reference_code,
+              product_variety_id: formData.get('product_variety_id'),
+              quantity: formData.get('quantity'),
+              unit: formData.get('unit'),
+              created_by: user.id
+            });
+
+          if (error) {
+            messageDiv.innerHTML = `<p class="error-message">Error creating shipment: ${error.message}</p>`;
+          } else {
+            messageDiv.innerHTML = `<p class="success-message">Shipment created successfully!</p>`;
+            form.reset();
+            closeCreateShipmentModal();
+            loadShipments();
+            loadDashboardStats();
+          }
+        });
+
+        document.getElementById('create-shipment-btn').addEventListener('click', openCreateShipmentModal);
+        document.getElementById('close-modal-btn').addEventListener('click', closeCreateShipmentModal);
+    };
+  </script>
+</head>
+<body>
+  <div class="loader-overlay" id="loader">
+    <div class="loader">
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+    </div>
+  </div>
+  <aside class="sidebar">
+     <div class="sidebar-header">
+      <img src="https://i.postimg.cc/j5K3DCyc/20250826-1802-Imports-360-Logo-simple-compose-01k3k7grx1f2fsmtvdcvwbx54s.png" alt="Logo" class="sidebar-logo">
+      <button class="sidebar-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <ul>
+        <li>
+          <a href="admin-dashboard.html" class="nav-link active">
+            <i class="fas fa-home icon"></i>
+            <span class="text">Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="forecast.html" class="nav-link">
+            <i class="fas fa-bullhorn icon"></i>
+            <span class="text">Forecasts</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu">
+            <i class="fas fa-box icon"></i>
+            <span class="text">Shipments</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu">
+            <li><a href="shipment_tracker.html" class="nav-link"><span class="text">Shipment Tracker</span></a></li>
+            <li><a href="shipment-details.html" class="nav-link"><span class="text">All Shipments</span></a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="product-details.html" class="nav-link">
+            <i class="fas fa-tags icon"></i>
+            <span class="text">Products</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-details.html" class="nav-link">
+            <i class="fas fa-truck icon"></i>
+            <span class="text">Suppliers</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-shipment-responses.html" class="nav-link">
+            <i class="fas fa-inbox icon"></i>
+            <span class="text">Supplier Responses</span>
+          </a>
+        </li>
+        <li>
+          <a href="bank-details.html" class="nav-link">
+            <i class="fas fa-university icon"></i>
+            <span class="text">Banks</span>
+          </a>
+        </li>
+        <li>
+          <a href="clearing-agent-details.html" class="nav-link">
+            <i class="fas fa-user-shield icon"></i>
+            <span class="text">Clearing Agents</span>
+          </a>
+        </li>
+        <li>
+          <a href="warehouse-details.html" class="nav-link">
+            <i class="fas fa-warehouse icon"></i>
+            <span class="text">Warehouses</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu open">
+            <i class="fas fa-truck-ramp-box icon"></i>
+            <span class="text">Freight</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu open">
+            <li><a href="send-freight-queries.html" class="nav-link"><span class="text">Send Freight Queries</span></a></li>
+            <li><a href="freight-query-response.html" class="nav-link"><span class="text">Freight Query Response</span></a></li>
+            <li><a href="manage-freight-queries.html" class="nav-link"><span class="text">Manage Freight Queries</span></a></li>
+            <li><a href="award-shipment.html" class="nav-link"><span class="text">Award Shipment</span></a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-title">
+        <h1>Dashboard</h1>
+        <p id="welcome-message">Welcome back!</p>
+      </div>
+      <div class="user-menu">
+        <button class="user-menu-button" id="user-menu-button">
+          <i class="fas fa-user-circle"></i>
+        </button>
+        <div class="dropdown-menu" id="dropdown-menu">
+          <div class="user-info">
+            <p id="user-full-name">Loading...</p>
+            <span id="user-role-email"></span>
+          </div>
+          <button class="logout-button" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-stats">
+       <div class="stat-card">
+        <div class="icon-container" style="background-color: #e0e7ff; color: #4f46e5;">
+          <i class="fas fa-boxes-stacked"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Total Shipments</h3>
+          <p id="total-shipments">0</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="icon-container" style="background-color: #dcfce7; color: #166534;">
+          <i class="fas fa-truck-fast"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Active Shipments</h3>
+          <p id="active-shipments">0</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="icon-container" style="background-color: #f3e8ff; color: #86198f;">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Completed</h3>
+          <p id="completed-shipments">0</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>All Shipments</h2>
+        <div class="search-container">
+          <i class="fas fa-search"></i>
+          <input type="text" id="shipment-search" placeholder="Search shipments...">
+        </div>
+        <button id="create-shipment-btn" class="button">Create New Shipment</button>
+      </div>
+      <div class="panel-body">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>Reference</th><th>Product Name</th><th>Variety Name</th><th>Supplier</th><th>Stage</th><th>Status</th><th>Created</th><th>Action</th></tr>
+            </thead>
+            <tbody id="shipments-table-body">
+              <!-- Rows will be injected by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<div id="create-shipment-modal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <span class="close-button" id="close-modal-btn">&times;</span>
+    <h2>Create New Shipment</h2>
+    <div id="create-shipment-message"></div>
+    <form id="create-shipment-form">
+      <div>
+        <label for="product_variety_id">Product Variety:</label>
+        <select id="product_variety_id" name="product_variety_id" required></select>
+      </div>
+      <div>
+        <label for="quantity">Quantity:</label>
+        <input type="number" id="quantity" name="quantity" required>
+      </div>
+      <div>
+        <label for="unit">Unit:</label>
+        <input type="text" id="unit" name="unit" required>
+      </div>
+      <button type="submit">Create Shipment</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

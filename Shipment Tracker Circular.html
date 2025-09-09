@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Advanced Shipment Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #FEFEFE;
+      min-height: 100vh;
+      color: #1E293B;
+      overflow-x: auto;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100px;
+      height: 4px;
+      background: #7C3AED;
+      border-radius: 2px;
+    }
+
+    .header h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      color: #1E293B;
+      margin-bottom: 10px;
+    }
+
+    .header p {
+      font-size: 1.1rem;
+      color: #64748B;
+      font-weight: 500;
+    }
+
+    .tracker-container {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+    }
+
+    .circular-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      position: relative;
+    }
+
+    .circular-progress {
+      position: relative;
+      width: 900px;
+      height: 900px;
+    }
+
+    .progress-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 800px;
+      height: 800px;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        rgba(124, 58, 237, 0.1) 0%,
+        rgba(139, 92, 246, 0.1) 50%,
+        rgba(124, 58, 237, 0.05) 100%
+      );
+      animation: rotate 30s linear infinite;
+    }
+
+    .center-hub {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 280px;
+      height: 280px;
+      background: #F1F5F9;
+      border-radius: 50%;
+      border: 2px solid rgba(124, 58, 237, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      box-shadow: 
+        0 0 30px rgba(124, 58, 237, 0.15),
+        0 10px 30px rgba(0, 0, 0, 0.05);
+      z-index: 10;
+    }
+
+    .shipment-id {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #7C3AED;
+      margin-bottom: 8px;
+    }
+
+    .shipment-product {
+      font-size: 1.1rem;
+      color: #1E293B;
+      margin-bottom: 12px;
+    }
+
+    .shipment-status {
+      font-size: 0.9rem;
+      padding: 6px 16px;
+      border-radius: 20px;
+      background: rgba(124, 58, 237, 0.05);
+      border: 1px solid rgba(124, 58, 237, 0.2);
+      color: #7C3AED;
+    }
+
+    .progress-stats {
+      display: flex;
+      gap: 20px;
+      margin-top: 15px;
+      font-size: 0.8rem;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: #7C3AED;
+    }
+
+    .stat-label {
+      color: #64748B;
+      margin-top: 2px;
+    }
+
+    .stage-node {
+      position: absolute;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 2px solid transparent;
+      transform-origin: center;
+    }
+
+    .stage-node.pending {
+      background: rgba(100, 116, 139, 0.1);
+      border-color: rgba(100, 116, 139, 0.3);
+      color: #64748B;
+    }
+
+    .stage-node.completed {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: #22c55e;
+      color: #15803d;
+      box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+    }
+
+    .stage-node.current {
+      background: rgba(124, 58, 237, 0.1);
+      border-color: #7C3AED;
+      color: #7C3AED;
+      box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    .stage-node:hover {
+      transform: scale(1.15);
+      z-index: 5;
+    }
+
+    .stage-node.completed:hover {
+      box-shadow: 0 0 25px rgba(34, 197, 94, 0.4);
+    }
+
+    .stage-node.current:hover {
+      box-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
+    }
+
+    .stage-icon {
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+
+    .stage-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 1.1;
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tooltip {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      background: #1E293B;
+      color: white;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid rgba(124, 58, 237, 0.2);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
+    }
+
+    .stage-node:hover .tooltip {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(-5px);
+    }
+
+    .sidebar {
+      width: 350px;
+      background: #F1F5F9;
+      border-radius: 24px;
+      padding: 30px;
+      border: 1px solid rgba(124, 58, 237, 0.1);
+      height: fit-content;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    .sidebar h3 {
+      font-size: 1.4rem;
+      margin-bottom: 20px;
+      color: #1E293B;
+    }
+
+    .stage-details {
+      background: #FEFEFE;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid rgba(124, 58, 237, 0.1);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+    }
+
+    .stage-details h4 {
+      color: #7C3AED;
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+    }
+
+    .detail-item {
+      display: flex;
+      justify-content: space-between;
+      margin: 8px 0;
+      font-size: 0.9rem;
+    }
+
+    .detail-label {
+      color: rgba(100, 116, 139, 0.6);
+    }
+
+    .detail-value {
+      color: #1E293B;
+      font-weight: 500;
+    }
+
+    .progress-bar-container {
+      margin: 20px 0;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(100, 116, 139, 0.2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7C3AED, #8B5CF6);
+      border-radius: 4px;
+      transition: width 1s ease;
+      position: relative;
+    }
+
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+
+    .timeline {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .timeline-item {
+      display: flex;
+      align-items: center;
+      margin: 15px 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: #FEFEFE;
+      transition: all 0.3s ease;
+      border: 1px solid rgba(124, 58, 237, 0.05);
+    }
+
+    .timeline-item:hover {
+      background: rgba(124, 58, 237, 0.02);
+      border-color: rgba(124, 58, 237, 0.1);
+    }
+
+    .timeline-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 12px;
+      font-size: 14px;
+    }
+
+    .timeline-icon.completed {
+      background: rgba(34, 197, 94, 0.1);
+      color: #15803d;
+    }
+
+    .timeline-icon.current {
+      background: rgba(124, 58, 237, 0.1);
+      color: #7C3AED;
+    }
+
+    .timeline-icon.pending {
+      background: rgba(100, 116, 139, 0.1);
+      color: #64748B;
+    }
+
+    .timeline-content {
+      flex: 1;
+    }
+
+    .timeline-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #1E293B;
+    }
+
+    .timeline-time {
+      font-size: 0.8rem;
+      color: rgba(100, 116, 139, 0.6);
+    }
+
+    @keyframes rotate {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+      }
+      50% {
+        box-shadow: 0 0 30px rgba(124, 58, 237, 0.5);
+      }
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1200px) {
+      .tracker-container {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .circular-progress {
+        width: 700px;
+        height: 700px;
+      }
+      
+      .progress-ring {
+        width: 600px;
+        height: 600px;
+      }
+      
+      .sidebar {
+        width: 100%;
+        max-width: 600px;
+        margin-top: 30px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .circular-progress {
+        width: 500px;
+        height: 500px;
+      }
+      
+      .progress-ring {
+        width: 400px;
+        height: 400px;
+      }
+      
+      .center-hub {
+        width: 200px;
+        height: 200px;
+      }
+      
+      .stage-node {
+        width: 60px;
+        height: 60px;
+      }
+      
+      .stage-icon {
+        font-size: 18px;
+      }
+      
+      .stage-label {
+        font-size: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Shipment Tracker</h1>
+      <p>Real-time logistics monitoring system</p>
+    </div>
+
+    <div class="tracker-container">
+      <div class="circular-container">
+        <div class="circular-progress" id="circularProgress">
+          <div class="progress-ring"></div>
+          <div class="center-hub">
+            <div class="shipment-id">#SP-2025-001</div>
+            <div class="shipment-product">Premium Cauliflower</div>
+            <div class="shipment-status">In Transit</div>
+            <div class="progress-stats">
+              <div class="stat">
+                <div class="stat-value" id="completedCount">8</div>
+                <div class="stat-label">Completed</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="progressPercent">36%</div>
+                <div class="stat-label">Progress</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value" id="remainingCount">14</div>
+                <div class="stat-label">Remaining</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <h3>Current Stage Details</h3>
+        <div class="stage-details" id="currentStageDetails">
+          <h4>LC Opening</h4>
+          <div class="detail-item">
+            <span class="detail-label">Started:</span>
+            <span class="detail-value">Sep 3, 2025</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Expected:</span>
+            <span class="detail-value">Sep 5, 2025</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Responsible:</span>
+            <span class="detail-value">Finance Team</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Status:</span>
+            <span class="detail-value">In Progress</span>
+          </div>
+        </div>
+
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="overallProgress" style="width: 36%"></div>
+          </div>
+        </div>
+
+        <h3>Timeline</h3>
+        <div class="timeline" id="timeline">
+          <!-- Timeline items will be populated by JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const stages = [
+      { name: "Forecast", icon: "fa-solid fa-bullhorn", responsible: "Sales Team", duration: "1 day" },
+      { name: "Enlistment Verification", icon: "fa-solid fa-check-double", responsible: "Compliance", duration: "2 days" },
+      { name: "Availability Confirmation", icon: "fa-solid fa-calendar-check", responsible: "Inventory", duration: "1 day" },
+      { name: "Purchase Order", icon: "fa-solid fa-file-invoice", responsible: "Procurement", duration: "1 day" },
+      { name: "Proforma", icon: "fa-solid fa-file-signature", responsible: "Finance Team", duration: "2 days" },
+      { name: "Invoice", icon: "fa-solid fa-file-invoice-dollar", responsible: "Accounts", duration: "1 day" },
+      { name: "IP Number", icon: "fa-solid fa-hashtag", responsible: "Regulatory", duration: "2 days" },
+      { name: "LC Opening", icon: "fa-solid fa-building-columns", responsible: "Finance Team", duration: "3 days" },
+      { name: "LC Shared", icon: "fa-solid fa-share-square", responsible: "Finance Team", duration: "1 day" },
+      { name: "Supplier Details", icon: "fa-solid fa-truck-fast", responsible: "Supplier Relations", duration: "1 day" },
+      { name: "Freight Query", icon: "fa-solid fa-dolly", responsible: "Logistics", duration: "2 days" },
+      { name: "Award Shipment", icon: "fa-solid fa-award", responsible: "Operations", duration: "1 day" },
+      { name: "Non Negotiable Docs", icon: "fa-solid fa-file-contract", responsible: "Documentation", duration: "2 days" },
+      { name: "Original Docs", icon: "fa-solid fa-file-import", responsible: "Documentation", duration: "1 day" },
+      { name: "Bank Endorsement", icon: "fa-solid fa-signature", responsible: "Banking", duration: "2 days" },
+      { name: "Send to Clearing Agent", icon: "fa-solid fa-paper-plane", responsible: "Logistics", duration: "1 day" },
+      { name: "Under Clearing Agent", icon: "fa-solid fa-user-shield", responsible: "Clearing Agent", duration: "3 days" },
+      { name: "Release Orders", icon: "fa-solid fa-box-open", responsible: "Customs", duration: "2 days" },
+      { name: "Gate Out", icon: "fa-solid fa-torii-gate", responsible: "Port Authority", duration: "1 day" },
+      { name: "Transportation", icon: "fa-solid fa-truck", responsible: "Transport Co.", duration: "5 days" },
+      { name: "Warehouse", icon: "fa-solid fa-warehouse", responsible: "Warehouse Team", duration: "1 day" },
+      { name: "Bills", icon: "fa-solid fa-money-bill-wave", responsible: "Finance Team", duration: "2 days" }
+    ];
+
+    const currentStageIndex = 7; // LC Opening is current
+    const circularProgress = document.getElementById('circularProgress');
+    const timeline = document.getElementById('timeline');
+
+    function initializeTracker() {
+      const radius = 350;
+      const centerX = 450;
+      const centerY = 450;
+      const totalStages = stages.length;
+      const angleIncrement = (2 * Math.PI) / totalStages;
+
+      // Create stage nodes
+      stages.forEach((stage, index) => {
+        const angle = index * angleIncrement - Math.PI / 2; // Start from top
+        const x = centerX + radius * Math.cos(angle) - 40;
+        const y = centerY + radius * Math.sin(angle) - 40;
+        
+        const stageNode = document.createElement('div');
+        stageNode.className = 'stage-node';
+        stageNode.style.left = `${x}px`;
+        stageNode.style.top = `${y}px`;
+        
+        // Determine stage status
+        let statusClass = 'pending';
+        if (index < currentStageIndex) {
+          statusClass = 'completed';
+        } else if (index === currentStageIndex) {
+          statusClass = 'current';
+        }
+        
+        stageNode.classList.add(statusClass);
+        
+        stageNode.innerHTML = `
+          <i class="${stage.icon} stage-icon"></i>
+          <div class="stage-label">${stage.name}</div>
+          <div class="tooltip">
+            <strong>${stage.name}</strong><br>
+            ${stage.responsible}<br>
+            Duration: ${stage.duration}
+          </div>
+        `;
+
+        stageNode.addEventListener('click', () => selectStage(index));
+        circularProgress.appendChild(stageNode);
+      });
+
+      // Update statistics
+      updateStatistics();
+      
+      // Populate timeline
+      populateTimeline();
+    }
+
+    function updateStatistics() {
+      const completedCount = currentStageIndex;
+      const totalStages = stages.length;
+      const progressPercent = Math.round((completedCount / totalStages) * 100);
+      const remainingCount = totalStages - completedCount;
+
+      document.getElementById('completedCount').textContent = completedCount;
+      document.getElementById('progressPercent').textContent = progressPercent + '%';
+      document.getElementById('remainingCount').textContent = remainingCount;
+      document.getElementById('overallProgress').style.width = progressPercent + '%';
+    }
+
+    function populateTimeline() {
+      timeline.innerHTML = '';
+      
+      stages.forEach((stage, index) => {
+        let statusClass = 'pending';
+        let timeText = 'Pending';
+        
+        if (index < currentStageIndex) {
+          statusClass = 'completed';
+          timeText = `Completed ${Math.floor(Math.random() * 10) + 1} days ago`;
+        } else if (index === currentStageIndex) {
+          statusClass = 'current';
+          timeText = 'In Progress';
+        } else {
+          timeText = `Starts in ${(index - currentStageIndex)} stages`;
+        }
+
+        const timelineItem = document.createElement('div');
+        timelineItem.className = 'timeline-item';
+        timelineItem.innerHTML = `
+          <div class="timeline-icon ${statusClass}">
+            <i class="${stage.icon}"></i>
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-title">${stage.name}</div>
+            <div class="timeline-time">${timeText}</div>
+          </div>
+        `;
+        
+        timeline.appendChild(timelineItem);
+      });
+    }
+
+    function selectStage(index) {
+      const stage = stages[index];
+      const detailsContainer = document.getElementById('currentStageDetails');
+      
+      let statusText = 'Pending';
+      let startDate = 'Not started';
+      let expectedDate = 'TBD';
+      
+      if (index < currentStageIndex) {
+        statusText = 'Completed';
+        startDate = `Sep ${Math.max(1, 4 - (currentStageIndex - index))}, 2025`;
+        expectedDate = `Sep ${Math.max(2, 5 - (currentStageIndex - index))}, 2025`;
+      } else if (index === currentStageIndex) {
+        statusText = 'In Progress';
+        startDate = 'Sep 3, 2025';
+        expectedDate = 'Sep 5, 2025';
+      } else {
+        startDate = `Sep ${5 + (index - currentStageIndex)}, 2025`;
+        expectedDate = `Sep ${6 + (index - currentStageIndex)}, 2025`;
+      }
+
+      detailsContainer.innerHTML = `
+        <h4>${stage.name}</h4>
+        <div class="detail-item">
+          <span class="detail-label">Started:</span>
+          <span class="detail-value">${startDate}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Expected:</span>
+          <span class="detail-value">${expectedDate}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Responsible:</span>
+          <span class="detail-value">${stage.responsible}</span>
+        </div>
+        <div class="detail-item">
+          <span class="detail-label">Status:</span>
+          <span class="detail-value">${statusText}</span>
+        </div>
+      `;
+    }
+
+    // Initialize the tracker when the page loads
+    document.addEventListener('DOMContentLoaded', initializeTracker);
+
+    // Auto-refresh simulation (optional)
+    setInterval(() => {
+      // Simulate real-time updates
+      const currentTime = new Date().toLocaleTimeString();
+      document.querySelector('.shipment-status').textContent = `Updated: ${currentTime}`;
+    }, 30000); // Update every 30 seconds
+  </script>
+</body>
+</html>

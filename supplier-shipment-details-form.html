@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit Shipment Details</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      background-color: #f1f5f9;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .form-container {
+      background-color: #ffffff;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 600px;
+    }
+    .form-container h1 {
+      text-align: center;
+      color: #1e293b;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #334155;
+    }
+    .form-group input[type="date"],
+    .form-group input[type="number"],
+    .form-group input[type="text"],
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 1rem;
+      color: #475569;
+      box-sizing: border-box;
+    }
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+    .button-submit {
+      width: 100%;
+      padding: 15px;
+      background-image: linear-gradient(to right, #7c3aed 0%, #8b5cf6 100%);
+      background-size: 200% auto;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px 0 rgba(124, 58, 237, 0.3);
+    }
+    .button-submit:hover {
+      background-position: right center;
+      box-shadow: 0 6px 20px 0 rgba(124, 58, 237, 0.4);
+      transform: translateY(-2px);
+    }
+    .message {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      text-align: center;
+      font-weight: 500;
+    }
+    .success-message {
+      background-color: #dcfce7;
+      color: #16a34a;
+      border: 1px solid #16a34a;
+    }
+    .error-message {
+      background-color: #fee2e2;
+      color: #dc2626;
+      border: 1px solid #dc2626;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h1>Submit Shipment Details</h1>
+    <div id="form-message" class="message" style="display: none;"></div>
+    <form id="shipment-details-form">
+      <input type="hidden" id="shipment_id" name="shipment_id">
+
+      <div class="form-group">
+        <label for="readiness_date">Readiness Date</label>
+        <input type="date" id="readiness_date" name="readiness_date">
+      </div>
+
+      <div class="form-group">
+        <label for="dimensions">Dimensions (JSON format, e.g., {"length": 10, "width": 5, "height": 5})</label>
+        <textarea id="dimensions" name="dimensions" placeholder='{"length": 10, "width": 5, "height": 5}'></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="gross_weight">Gross Weight</label>
+        <input type="number" step="0.01" id="gross_weight" name="gross_weight">
+      </div>
+
+      <div class="form-group">
+        <label for="cartons_count">Number of Cartons</label>
+        <input type="number" id="cartons_count" name="cartons_count">
+      </div>
+
+      <div class="form-group">
+        <label for="transport">Transport Mode</label>
+        <select id="transport" name="transport">
+          <option value="">Select Transport Mode</option>
+          <option value="air">Air</option>
+          <option value="sea">Sea</option>
+          <option value="road">Road</option>
+          <option value="rail">Rail</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="details_received_date">Details Received Date</label>
+        <input type="date" id="details_received_date" name="details_received_date">
+      </div>
+
+      <button type="submit" class="button-submit">Submit Details</button>
+    </form>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/+esm";
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+    const form = document.getElementById('shipment-details-form');
+    const messageDiv = document.getElementById('form-message');
+    const shipmentIdInput = document.getElementById('shipment_id');
+
+    function showMessage(message, isError = false) {
+      messageDiv.textContent = message;
+      messageDiv.className = `message ${isError ? 'error-message' : 'success-message'}`;
+      messageDiv.style.display = 'block';
+    }
+
+    async function loadShipmentDetails() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const shipmentId = urlParams.get('shipment_id');
+
+      if (!shipmentId) {
+        showMessage('Error: Shipment ID is missing from the URL.', true);
+        form.style.display = 'none';
+        return;
+      }
+
+      shipmentIdInput.value = shipmentId;
+
+      // Fetch existing details if any
+      const { data, error } = await supabase
+        .from('supplier_shipment_details')
+        .select('*')
+        .eq('shipment_id', shipmentId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found
+        showMessage(`Error loading existing details: ${error.message}`, true);
+        return;
+      }
+
+      if (data) {
+        document.getElementById('readiness_date').value = data.readiness_date || '';
+        document.getElementById('dimensions').value = data.dimensions ? JSON.stringify(data.dimensions, null, 2) : '';
+        document.getElementById('gross_weight').value = data.gross_weight || '';
+        document.getElementById('cartons_count').value = data.cartons_count || '';
+        document.getElementById('transport').value = data.transport || '';
+        document.getElementById('details_received_date').value = data.details_received_date || '';
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      showMessage('Submitting details...', false);
+
+      const formData = new FormData(form);
+      const details = {
+        shipment_id: shipmentIdInput.value,
+        readiness_date: formData.get('readiness_date') || null,
+        gross_weight: formData.get('gross_weight') || null,
+        cartons_count: formData.get('cartons_count') || null,
+        transport: formData.get('transport') || null,
+        details_received_date: formData.get('details_received_date') || null,
+      };
+
+      // Handle dimensions (JSON parsing)
+      const dimensionsValue = formData.get('dimensions');
+      if (dimensionsValue) {
+        try {
+          details.dimensions = JSON.parse(dimensionsValue);
+        } catch (e) {
+          showMessage('Error: Dimensions must be valid JSON.', true);
+          return;
+        }
+      } else {
+        details.dimensions = null;
+      }
+
+      const { error } = await supabase
+        .from('supplier_shipment_details')
+        .upsert(details, { onConflict: 'shipment_id' });
+
+      if (error) {
+        showMessage(`Error saving details: ${error.message}`, true);
+      } else {
+        showMessage('Shipment details saved successfully!', false);
+        // Optionally, disable form or redirect
+      }
+    });
+
+    window.onload = loadShipmentDetails;
+  </script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Submit Freight Quote</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/+esm";
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+    function showMessage(message, isError = false) {
+      const messageDiv = document.getElementById('message');
+      messageDiv.innerHTML = `<p class="${isError ? 'error-message' : 'success-message'}">${message}</p>`;
+    }
+
+    async function submitQuote() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const freightQueryId = urlParams.get('freight_query_id');
+
+      if (!freightQueryId) {
+        showMessage('A freight query ID is required to submit a quote.', true);
+        return;
+      }
+
+      const form = document.getElementById('quote-form');
+      const formData = new FormData(form);
+      const quoteData = {
+        freight_query_id: freightQueryId,
+        quote_amount: formData.get('quote_amount'),
+        currency: formData.get('currency'),
+        transit_days: formData.get('transit_days'),
+        validity_date: formData.get('validity_date'),
+      };
+
+      const file = formData.get('attachment');
+      let attachment_url = null;
+
+      if (file && file.size > 0) {
+        const { data, error } = await supabase.storage
+          .from('shipment-docs')
+          .upload(`${freightQueryId}/${file.name}`, file, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (error) {
+          showMessage(`Error uploading file: ${error.message}`, true);
+          return;
+        }
+
+        const { data: publicUrlData } = supabase.storage.from('freight-quotes').getPublicUrl(data.path);
+        attachment_url = publicUrlData.publicUrl;
+      }
+
+      quoteData.attachment_url = attachment_url;
+
+      const { error } = await supabase
+        .from('freight_quote_response')
+        .insert(quoteData);
+
+      if (error) {
+        showMessage(`Error submitting quote: ${error.message}`, true);
+      } else {
+        showMessage('Quote submitted successfully! Thank you.');
+        form.reset();
+      }
+    }
+
+    window.submitQuote = submitQuote;
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>Submit Freight Quote</h1>
+    <div id="message"></div>
+    <form id="quote-form" onsubmit="event.preventDefault(); submitQuote();">
+      <div>
+        <label for="quote_amount">Quote Amount</label>
+        <input type="number" id="quote_amount" name="quote_amount" step="0.01" required>
+      </div>
+      <div>
+        <label for="currency">Currency</label>
+        <input type="text" id="currency" name="currency" required>
+      </div>
+      <div>
+        <label for="transit_days">Transit Days</label>
+        <input type="number" id="transit_days" name="transit_days" required>
+      </div>
+      <div>
+        <label for="validity_date">Validity Date</label>
+        <input type="date" id="validity_date" name="validity_date" required>
+      </div>
+      <div>
+        <label for="attachment">Attachment (Optional)</label>
+        <input type="file" id="attachment" name="attachment">
+      </div>
+      <div class="button-container">
+        <button type="submit">Submit Quote</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
