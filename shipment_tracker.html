@@ -510,6 +510,7 @@
     }
 
     .modal-content {
+        position: relative;
         transform: scale(0.9);
         transition: transform 0.3s ease, opacity 0.3s ease; /* Add opacity transition */
         opacity: 0; /* Initially hidden */
@@ -555,6 +556,20 @@
 
     .toast-notification.error {
         background-color: #dc3545;
+    }
+
+    .modal-loader {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      display: none; /* Hidden by default */
+      justify-content: center;
+      align-items: center;
+      z-index: 1001;
+      border-radius: 12px;
     }
   </style>
 </head>
@@ -655,6 +670,13 @@
           </div>
         </div>
         <div id="stage-modal-message"></div>
+        <div class="modal-loader" style="display: none;">
+            <div class="loader">
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+              <div class="loader-dot"></div>
+            </div>
+        </div>
       </div>
     </div>
   </div>
@@ -963,6 +985,11 @@
 
         // Render circular progress
         const circularProgress = document.getElementById('circularProgress');
+        
+        // Remove existing stage nodes to prevent duplication on re-render
+        const existingNodes = circularProgress.querySelectorAll('.stage-node');
+        existingNodes.forEach(node => node.remove());
+
         const radius = 320;
         const centerX = 420;
         const centerY = 420;
@@ -1126,6 +1153,16 @@
         modalTitle.innerText = stageName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         showMessage('stage-modal-message', '');
         
+        await renderStageView();
+        console.log('Showing stage modal.');
+    }
+
+    async function renderStageView() {
+        const viewContainer = document.getElementById('stage-view-container');
+        const editContainer = document.getElementById('stage-edit-container');
+        const table = document.getElementById('stage-details-table');
+        const config = currentStageData.config;
+        
         let selectString = '*';
         config.fields.forEach(field => {
             if (field.fk) {
@@ -1146,14 +1183,7 @@
             return;
         }
         currentStageData.details = data || {};
-        renderStageView();
-        console.log('Showing stage modal.');
-    }
 
-    async function renderStageView() {
-        const viewContainer = document.getElementById('stage-view-container');
-        const editContainer = document.getElementById('stage-edit-container');
-        const table = document.getElementById('stage-details-table');
         table.innerHTML = ''; // Clear previous data
 
         for (const field of currentStageData.config.fields) {
@@ -1185,9 +1215,11 @@
             }
 
             const row = table.insertRow();
-            row.innerHTML = `<td>${field.label}</td><td>${displayValue}</td>`;
+            row.innerHTML = `<td>${field.label}</td><td>${displayValue || 'N/A'}</td>`;
         }
 
+        viewContainer.style.display = 'block';
+        editContainer.style.display = 'none';
         document.getElementById('edit-stage-button').style.display = 'block';
         document.getElementById('save-stage-button').style.display = 'none';
         document.getElementById('cancel-edit-button').style.display = 'none';
@@ -1304,139 +1336,145 @@
     }
 
     async function saveStageDetails() {
-        console.log('saveStageDetails function called.');
-        const stageName = currentStageData.stageName;
-        const config = STAGE_CONFIG[stageName];
-        const form = document.getElementById('modal-form');
-        const formData = new FormData(form);
-        const updates = { 
-            shipment_id: shipmentId
-        };
+        const modalLoader = document.querySelector('#stage-modal .modal-loader');
+        try {
+            modalLoader.style.display = 'flex';
+            console.log('saveStageDetails function called.');
+            const stageName = currentStageData.stageName;
+            const config = STAGE_CONFIG[stageName];
+            const form = document.getElementById('modal-form');
+            const formData = new FormData(form);
+            const updates = { 
+                shipment_id: shipmentId
+            };
 
-        const fileUrlField = config.fields.find(f => f.name.endsWith('_url') || f.name.endsWith('_doc'));
-        let file_url = null;
-        if (fileUrlField && currentStageData.details) {
-            file_url = currentStageData.details[fileUrlField.name] || null;
-        }
+            const fileUrlField = config.fields.find(f => f.name.endsWith('_url') || f.name.endsWith('_doc'));
+            let file_url = null;
+            if (fileUrlField && currentStageData.details) {
+                file_url = currentStageData.details[fileUrlField.name] || null;
+            }
 
-        for (const field of config.fields) {
-            const key = field.name;
-            if (key === (fileUrlField ? fileUrlField.name : '')) continue;
+            for (const field of config.fields) {
+                const key = field.name;
+                if (key === (fileUrlField ? fileUrlField.name : '')) continue;
 
-            let value = formData.get(key);
+                let value = formData.get(key);
 
-            if (field.type === 'boolean') {
-                updates[key] = form.querySelector(`[name="${key}"]`).checked;
-            } else if (field.type === 'datetime-local') {
-                updates[key] = value ? new Date(value).toISOString() : null;
-            } else if (field.type === 'jsonb') {
-                try {
-                    updates[key] = value ? JSON.parse(value) : null;
-                } catch (e) {
-                    showMessage("stage-modal-message", `<p class="error-message">Invalid JSON in ${field.label}</p>`);
+                if (field.type === 'boolean') {
+                    updates[key] = form.querySelector(`[name="${key}"]`).checked;
+                } else if (field.type === 'datetime-local') {
+                    updates[key] = value ? new Date(value).toISOString() : null;
+                } else if (field.type === 'jsonb') {
+                    try {
+                        updates[key] = value ? JSON.parse(value) : null;
+                    } catch (e) {
+                        showMessage("stage-modal-message", `<p class="error-message">Invalid JSON in ${field.label}</p>`);
+                        return;
+                    }
+                } else if (field.type === 'uuid' && !value) {
+                    continue;
+                } else if (field.type !== 'file') {
+                    updates[key] = value || null;
+                }
+            }
+
+            const file = document.getElementById('document').files[0];
+            if (file && file.size > 0) {
+                const { data, error } = await supabase.storage
+                    .from('shipment-docs')
+                    .upload(`${shipmentId}/${stageName}/${file.name}`, file, {
+                        cacheControl: '3600',
+                        upsert: true
+                    });
+
+                if (error) {
+                    showMessage('stage-modal-message', `Error uploading file: ${error.message}`, true);
                     return;
                 }
-            } else if (field.type === 'uuid' && !value) {
-                continue;
-            } else if (field.type !== 'file') {
-                updates[key] = value || null;
+
+                const { data: publicUrlData } = supabase.storage.from('shipment-docs').getPublicUrl(data.path);
+                file_url = publicUrlData.publicUrl;
             }
-        }
 
-        const file = document.getElementById('document').files[0];
-        if (file && file.size > 0) {
-            const { data, error } = await supabase.storage
-                .from('shipment-docs')
-                .upload(`${shipmentId}/${stageName}/${file.name}`, file, {
-                    cacheControl: '3600',
-                    upsert: true
+            if (file_url && fileUrlField) {
+                updates[fileUrlField.name] = file_url;
+            }
+
+            Object.keys(updates).forEach(key => {
+                if (updates[key] === undefined) {
+                    delete updates[key];
+                }
+            });
+
+            console.log('Sending updates:', updates);
+
+            let query;
+            if (stageName === 'freight_query') {
+                query = supabase.from(config.table).insert(updates);
+            } else {
+                query = supabase.from(config.table).upsert(updates, {
+                    onConflict: 'shipment_id'
                 });
+            }
 
-            if (error) {
-                showMessage('stage-modal-message', `Error uploading file: ${error.message}`, true);
+            const { error: upsertError } = await query;
+
+            if (upsertError) {
+                showMessage("stage-modal-message", `<p class="error-message">Error saving details: ${upsertError.message}</p>`);
+                return;
+            }
+            console.log('Upsert successful.');
+
+            const { data: checklistData, error: checklistError } = await supabase
+                .from('v_shipment_stage_checklist')
+                .select('current_stage')
+                .eq('shipment_id', shipmentId)
+                .single();
+
+            if (checklistError) {
+                showMessage('stage-modal-message', `Error fetching current stage: ${checklistError.message}`, true);
                 return;
             }
 
-            const { data: publicUrlData } = supabase.storage.from('shipment-docs').getPublicUrl(data.path);
-            file_url = publicUrlData.publicUrl;
-        }
+            const { data: nextStageData, error: nextStageError } = await supabase
+                .from('stage_edge')
+                .select('to_stage')
+                .eq('from_stage', checklistData.current_stage);
 
-        if (file_url && fileUrlField) {
-            updates[fileUrlField.name] = file_url;
-        }
-
-        Object.keys(updates).forEach(key => {
-            if (updates[key] === undefined) {
-                delete updates[key];
+            if (nextStageError) {
+                showMessage('stage-modal-message', `Error fetching next stage: ${nextStageError.message}`, true);
+                return;
             }
-        });
 
-        console.log('Sending updates:', updates);
-
-        let query;
-        if (stageName === 'freight_query') {
-            query = supabase.from(config.table).insert(updates);
-        } else {
-            query = supabase.from(config.table).upsert(updates, {
-                onConflict: 'shipment_id'
-            });
-        }
-
-        const { error: upsertError } = await query;
-
-        if (upsertError) {
-            showMessage("stage-modal-message", `<p class="error-message">Error saving details: ${upsertError.message}</p>`);
-            return;
-        }
-        console.log('Upsert successful.');
-
-        const { data: checklistData, error: checklistError } = await supabase
-            .from('v_shipment_stage_checklist')
-            .select('current_stage')
-            .eq('shipment_id', shipmentId)
-            .single();
-
-        if (checklistError) {
-            showMessage('stage-modal-message', `Error fetching current stage: ${checklistError.message}`, true);
-            return;
-        }
-
-        const { data: nextStageData, error: nextStageError } = await supabase
-            .from('stage_edge')
-            .select('to_stage')
-            .eq('from_stage', checklistData.current_stage);
-
-        if (nextStageError) {
-            showMessage('stage-modal-message', `Error fetching next stage: ${nextStageError.message}`, true);
-            return;
-        }
-
-        if (!nextStageData || nextStageData.length === 0) {
-            closeModal();
-            initializeTracker();
-            showToast('Stage updated successfully!', true);
-            return;
-        }
-
-        const nextStage = nextStageData[0].to_stage;
-
-        const { error: advanceStageError } = await supabase.rpc('advance_stage', {
-            p_shipment_id: shipmentId,
-            p_to_stage: nextStage,
-            p_meta: { manual: true }
-        });
-
-        if (advanceStageError) {
-            if (advanceStageError.message.includes('Requirements not met')) {
-                showMessage("stage-modal-message", `<p class="warning-message">Data saved, but the stage cannot be advanced. Please ensure all required fields are filled. Reason: ${advanceStageError.message}</p>`);
+            if (!nextStageData || nextStageData.length === 0) {
+                closeModal();
                 initializeTracker();
-            } else {
-                showMessage("stage-modal-message", `<p class="error-message">Error advancing stage: ${advanceStageError.message}</p>`);
+                showToast('Stage updated successfully!', true);
+                return;
             }
-        } else {
-            closeModal();
-            initializeTracker();
-            showToast('Stage updated and advanced successfully!', true);
+
+            const nextStage = nextStageData[0].to_stage;
+
+            const { error: advanceStageError } = await supabase.rpc('advance_stage', {
+                p_shipment_id: shipmentId,
+                p_to_stage: nextStage,
+                p_meta: { manual: true }
+            });
+
+            if (advanceStageError) {
+                if (advanceStageError.message.includes('Requirements not met')) {
+                    showMessage("stage-modal-message", `<p class="warning-message">Data saved, but the stage cannot be advanced. Please ensure all required fields are filled. Reason: ${advanceStageError.message}</p>`);
+                    initializeTracker();
+                } else {
+                    showMessage("stage-modal-message", `<p class="error-message">Error advancing stage: ${advanceStageError.message}</p>`);
+                }
+            } else {
+                closeModal();
+                initializeTracker();
+                showToast('Stage updated and advanced successfully!', true);
+            }
+        } finally {
+            modalLoader.style.display = 'none';
         }
     }
 
