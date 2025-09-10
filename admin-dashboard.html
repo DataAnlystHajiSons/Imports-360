@@ -35,6 +35,11 @@
       document.getElementById('completed-shipments').textContent = completedCount;
     }
 
+    function toProperCase(str) {
+      if (!str) return '';
+      return str.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+    }
+
     async function loadShipments(searchTerm = '') {
       // Query the new view
       let query = supabase.from("v_shipments_with_details").select(`
@@ -75,8 +80,8 @@
           <td>${s.product_variety.product_name}</td>
           <td>${s.product_variety.variety_name}</td>
           <td>${supplierName}</td>
-          <td>${s.current_stage}</td>
-          <td>${s.status}</td>
+          <td>${toProperCase(s.current_stage)}</td>
+          <td>${toProperCase(s.status)}</td>
           <td>${new Date(s.created_at).toLocaleDateString()}</td>
           <td><a href="shipment_tracker.html?id=${s.id}" class='button'>Open</a></td>
         </tr>`;
@@ -396,5 +401,75 @@
     </form>
   </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarToggle = document.querySelector('.sidebar-toggle');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const hasSubmenus = document.querySelectorAll('.has-submenu');
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+
+    function handleMediaQueryChange(e) {
+        if (e.matches) {
+            sidebar.classList.remove('collapsed');
+            sidebar.classList.remove('open');
+        } else {
+            sidebar.classList.remove('open');
+        }
+    }
+
+    handleMediaQueryChange(mediaQuery);
+    mediaQuery.addListener(handleMediaQueryChange);
+
+    sidebarToggle.addEventListener('click', () => {
+        if (mediaQuery.matches) {
+            sidebar.classList.toggle('open');
+        } else {
+            sidebar.classList.toggle('collapsed');
+        }
+    });
+
+    hasSubmenus.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const submenu = item.nextElementSibling;
+            if (submenu && submenu.classList.contains('submenu')) {
+                submenu.classList.toggle('open');
+                item.classList.toggle('open');
+            }
+        });
+    });
+
+    const currentPath = window.location.pathname.split('/').pop();
+    navLinks.forEach(link => {
+        if (link.href.split('/').pop() === currentPath) {
+            link.classList.add('active');
+            let parentSubmenu = link.closest('.submenu');
+            if (parentSubmenu) {
+                parentSubmenu.classList.add('open');
+                let parentHasSubmenu = parentSubmenu.previousElementSibling;
+                if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+                    parentHasSubmenu.classList.add('open');
+                }
+            }
+        }
+    });
+
+    const userMenuButton = document.getElementById('user-menu-button');
+    const dropdownMenu = document.getElementById('dropdown-menu');
+
+    if (userMenuButton) {
+        userMenuButton.addEventListener('click', () => {
+            dropdownMenu.classList.toggle('show');
+        });
+    }
+
+    window.addEventListener('click', (event) => {
+        if (userMenuButton && !userMenuButton.contains(event.target) && dropdownMenu && !dropdownMenu.contains(event.target)) {
+            dropdownMenu.classList.remove('show');
+        }
+    });
+});
+</script>
 </body>
 </html>
