@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Imports 360 - Documents</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+    async function loadDimensions() {
+      const dimensionSelect = document.getElementById('dimension-select');
+      dimensionSelect.innerHTML = '<option value="">Select Dimension</option>';
+      const dimensions = ['Supplier', 'Shipment', 'Bank', 'Clearing Agent'];
+      dimensions.forEach(d => {
+        dimensionSelect.innerHTML += `<option value="${d.toLowerCase().replace(' ', '_')}">${d}</option>`;
+      });
+    }
+
+    async function loadEntities() {
+      const dimension = document.getElementById('dimension-select').value;
+      const entitySelect = document.getElementById('entity-select');
+      entitySelect.innerHTML = '<option value="">Select Entity</option>';
+      entitySelect.disabled = true;
+
+      if (!dimension) return;
+
+      let tableName, selectColumns;
+      switch (dimension) {
+        case 'supplier':
+          tableName = 'supplier';
+          selectColumns = 'id, name';
+          break;
+        case 'shipment':
+          tableName = 'shipment';
+          selectColumns = 'id, reference_code';
+          break;
+        case 'bank':
+          tableName = 'bank';
+          selectColumns = 'id, name';
+          break;
+        case 'clearing_agent':
+          tableName = 'clearing_agent';
+          selectColumns = 'id, name';
+          break;
+        default:
+          return;
+      }
+
+      const { data, error } = await supabase.from(tableName).select(selectColumns);
+      if (error) {
+        console.error(`Error loading ${dimension}s:`, error);
+        return;
+      }
+
+      data.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.name || item.reference_code;
+        entitySelect.appendChild(option);
+      });
+      entitySelect.disabled = false;
+    }
+
+    async function loadDocuments() {
+      const dimension = document.getElementById('dimension-select').value;
+      const entityId = document.getElementById('entity-select').value;
+      const documentsTableBody = document.getElementById('documents-table-body');
+      documentsTableBody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+
+      if (!dimension || !entityId) {
+        documentsTableBody.innerHTML = '<tr><td colspan="4">Please select a dimension and entity.</td></tr>';
+        return;
+      }
+
+      let { data, error } = await supabase.rpc('get_documents_by_dimension', { p_dimension: dimension, p_entity_id: entityId });
+
+      if (error) {
+        documentsTableBody.innerHTML = `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      if (data.length === 0) {
+        documentsTableBody.innerHTML = '<tr><td colspan="4">No documents found.</td></tr>';
+        return;
+      }
+
+      // Since the RPC returns documents, we need to fetch the shipment reference code separately for display
+      const shipmentIds = [...new Set(data.map(doc => doc.shipment_id))];
+      const { data: shipments, error: shipmentsError } = await supabase
+        .from('shipment')
+        .select('id, reference_code')
+        .in('id', shipmentIds);
+
+      if (shipmentsError) {
+        documentsTableBody.innerHTML = `<tr><td colspan="4">Error fetching shipment details: ${shipmentsError.message}</td></tr>`;
+        return;
+      }
+
+      const shipmentMap = new Map(shipments.map(s => [s.id, s.reference_code]));
+
+      let html = '';
+      data.forEach(doc => {
+        html += `<tr>
+          <td>${shipmentMap.get(doc.shipment_id) || 'N/A'}</td>
+          <td>${doc.doc_type}</td>
+          <td>${new Date(doc.uploaded_at).toLocaleString()}</td>
+          <td><a href="${doc.file_url}" target="_blank" class="button">View</a></td>
+        </tr>`;
+      });
+      documentsTableBody.innerHTML = html;
+    }
+
+    window.onload = async () => {
+      await loadDimensions();
+      document.getElementById('dimension-select').addEventListener('change', loadEntities);
+      document.getElementById('entity-select').addEventListener('change', loadDocuments);
+    };
+  </script>
+</head>
+<body>
+  <aside class="sidebar">
+     <div class="sidebar-header">
+      <img src="https://i.postimg.cc/j5K3DCyc/20250826-1802-Imports-360-Logo-simple-compose-01k3k7grx1f2fsmtvdcvwbx54s.png" alt="Logo" class="sidebar-logo">
+      <button class="sidebar-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <ul>
+        <li>
+          <a href="admin-dashboard.html" class="nav-link">
+            <i class="fas fa-home icon"></i>
+            <span class="text">Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="documents.html" class="nav-link active">
+            <i class="fas fa-file-alt icon"></i>
+            <span class="text">Documents</span>
+          </a>
+        </li>
+        <!-- Add other sidebar links here -->
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-title">
+        <button class="back-button" onclick="window.history.back();"><i class="fas fa-arrow-left"></i></button>
+        <h1>Documents</h1>
+      </div>
+    </header>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Document Query</h2>
+      </div>
+      <div class="panel-body">
+        <div class="filter-pane open">
+          <div class="filter-group">
+            <label for="dimension-select">Dimension</label>
+            <select id="dimension-select"></select>
+          </div>
+          <div class="filter-group">
+            <label for="entity-select">Entity</label>
+            <select id="entity-select" disabled></select>
+          </div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Shipment</th>
+                <th>Document Type</th>
+                <th>Uploaded At</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="documents-table-body">
+              <tr><td colspan="4">Please select a dimension and entity to view documents.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

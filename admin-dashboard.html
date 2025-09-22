@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Imports 360 - Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+
+    const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+    async function loadDashboardStats() {
+      const { count: totalCount, error: totalError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: activeCount, error: activeError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      const { count: completedCount, error: completedError } = await supabase
+        .from('shipment')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'completed');
+
+      if(totalError || activeError || completedError) {
+        console.error("Error fetching stats:", totalError || activeError || completedError);
+        return;
+      }
+
+      document.getElementById('total-shipments').textContent = totalCount;
+      document.getElementById('active-shipments').textContent = activeCount;
+      document.getElementById('completed-shipments').textContent = completedCount;
+    }
+
+    function toProperCase(str) {
+      if (!str) return '';
+      return str.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+    }
+
+    async function loadShipments(searchTerm = '', filters = {}) {
+      const { data, error } = await supabase.rpc('filter_shipments', {
+        p_search_term: searchTerm,
+        p_supplier_id: filters.supplier_id,
+        p_clearing_agent_id: filters.clearing_agent_id,
+        p_bank_id: filters.bank_id,
+        p_status: filters.status,
+        p_commodity: filters.commodity,
+        p_lc_number: filters.lc_number,
+        p_product_name: filters.product_name,
+        p_variety_name: filters.variety_name
+      });
+
+      if (error) {
+        document.getElementById("shipments-table-body").innerHTML = `<tr><td colspan="8">Error: ${error.message}</td></tr>`;
+        return;
+      }
+
+      const tableBody = document.getElementById("shipments-table-body");
+      if (data.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" style="text-align: center;">No shipments found.</td></tr>`;
+        return;
+      }
+
+      let html = "";
+      data.forEach(s => {
+        const products = s.product_variety;
+        let productCellHtml = 'N/A';
+        let varietyCellHtml = 'N/A';
+        let subRowsHtml = '';
+
+        if (products && products.length > 0) {
+          const firstProduct = products[0];
+          productCellHtml = `${firstProduct.product_name}`;
+          varietyCellHtml = `${firstProduct.variety_name}`;
+
+          if (products.length > 1) {
+            productCellHtml += ` <span class="product-badge">+${products.length - 1}</span>`;
+            
+            products.slice(1).forEach(p => {
+              subRowsHtml += `<tr class="sub-product-row" data-parent-shipment="${s.id}">
+                <td class="sub-product-indent"><span class="sub-product-arrow">&#8627;</span></td>
+                <td>${p.product_name}</td>
+                <td>${p.variety_name}</td>
+                <td>${p.supplier.name}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>`;
+            });
+          }
+        }
+        
+        const supplierName = s.supplier_name || 'N/A';
+
+        html += `<tr class="main-row" data-shipment-id="${s.id}">
+          <td><a href="shipment-details.html?id=${s.id}">${s.reference_code}</a></td>
+          <td class="product-cell">${productCellHtml}</td>
+          <td>${varietyCellHtml}</td>
+          <td>${supplierName}</td>
+          <td>${toProperCase(s.current_stage)}</td>
+          <td>${toProperCase(s.status)}</td>
+          <td>${s.lc_number || 'Not assigned Yet'}</td>
+          <td><a href="shipment_tracker.html?id=${s.id}" class='button'>Open</a></td>
+        </tr>`;
+        html += subRowsHtml;
+      });
+      tableBody.innerHTML = html;
+
+      tableBody.querySelectorAll('.product-cell').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+          const row = e.target.closest('.main-row');
+          const shipmentId = row.dataset.shipmentId;
+          const subRows = tableBody.querySelectorAll(`.sub-product-row[data-parent-shipment="${shipmentId}"]`);
+          subRows.forEach(subRow => {
+            subRow.classList.toggle('show');
+          });
+        });
+      });
+    }
+
+    function debounce(func, delay) {
+      let timeout;
+      return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+      };
+    }
+
+    async function logout() {
+        await supabase.auth.signOut();
+        window.location.href = 'login.html';
+    }
+
+    
+
+    function closeCreateShipmentModal() {
+      document.getElementById('create-shipment-modal').style.display = 'none';
+    }
+
+    function toggleFilterPane() {
+      const filterPane = document.getElementById('filter-pane');
+      filterPane.classList.toggle('open');
+    }
+
+    async function loadFilterOptions() {
+      const { data: suppliers, error: supplierError } = await supabase.from('supplier').select('id, name');
+      if (supplierError) console.error('Error loading suppliers:', supplierError); 
+      else {
+        const select = document.getElementById('supplier-filter');
+        select.innerHTML = '<option value="">All</option>';
+        suppliers.forEach(item => {
+          select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
+        });
+      }
+
+      const { data: clearingAgents, error: caError } = await supabase.from('clearing_agent').select('id, name');
+      if (caError) console.error('Error loading clearing agents:', caError); 
+      else {
+        const select = document.getElementById('clearing-agent-filter');
+        select.innerHTML = '<option value="">All</option>';
+        clearingAgents.forEach(item => {
+          select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
+        });
+      }
+
+      const { data: banks, error: bankError } = await supabase.from('bank').select('id, name');
+      if (bankError) console.error('Error loading banks:', bankError); 
+      else {
+        const select = document.getElementById('bank-filter');
+        select.innerHTML = '<option value="">All</option>';
+        banks.forEach(item => {
+          select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
+        });
+      }
+
+      const { data: commodities, error: commodityError } = await supabase.from('commodity').select('id, name');
+      if (commodityError) console.error('Error loading commodities:', commodityError); 
+      else {
+        const select = document.getElementById('commodity-filter');
+        select.innerHTML = '<option value="">All</option>';
+        commodities.forEach(item => {
+          select.innerHTML += `<option value="${item.name}">${item.name}</option>`;
+        });
+      }
+    }
+
+    async function openCreateShipmentModal() {
+      await loadProductVarieties();
+      document.getElementById('product-list-container').innerHTML = ''; // Clear previous products
+      addProductForm();
+      document.getElementById('create-shipment-modal').style.display = 'block';
+    }
+
+    let activeCommoditySelect = null;
+
+    async function loadCommodities(selectElement) {
+      const { data, error } = await supabase.from('commodity').select('id, name');
+      if (error) {
+        console.error('Error loading commodities:', error);
+        return;
+      }
+      selectElement.innerHTML = '<option value="">Select a commodity</option>';
+      data.forEach(c => {
+        const option = document.createElement('option');
+        option.value = c.id;
+        option.textContent = c.name;
+        selectElement.appendChild(option);
+      });
+    }
+
+    function openAddCommodityModal(selectElement) {
+      activeCommoditySelect = selectElement;
+      document.getElementById('add-commodity-modal').style.display = 'block';
+    }
+
+    function closeAddCommodityModal() {
+      document.getElementById('add-commodity-modal').style.display = 'none';
+    }
+
+    let productVarieties = [];
+    async function loadProductVarieties() {
+      const { data, error } = await supabase
+        .from('product_variety')
+        .select('id, product_name, variety_name, commodity_id');
+
+      if (error) {
+        console.error('Error loading product varieties:', error);
+        return;
+      }
+      productVarieties = data;
+    }
+
+    function addProductForm() {
+      const container = document.getElementById('product-list-container');
+      const productForm = document.createElement('div');
+      productForm.classList.add('product-form-item');
+
+      productForm.innerHTML = `
+        <div>
+          <label>Commodity:</label>
+          <div class="input-group">
+            <select name="commodity" required></select>
+            <button type="button" class="add-new-btn">+</button>
+          </div>
+        </div>
+        <div>
+          <label>Product Variety:</label>
+          <select name="product_variety_id" required disabled>
+            <option value="">Select a commodity first</option>
+          </select>
+        </div>
+        <div>
+          <label>Quantity:</label>
+          <input type="number" name="quantity" required>
+        </div>
+        <div>
+          <label>Unit:</label>
+          <input type="text" name="unit" required>
+        </div>
+        <button type="button" class="remove-product-btn button-secondary">Remove</button>
+        <hr>
+      `;
+
+      const commoditySelect = productForm.querySelector('[name="commodity"]');
+      const varietySelect = productForm.querySelector('[name="product_variety_id"]');
+      const addNewBtn = productForm.querySelector('.add-new-btn');
+
+      // Populate commodity dropdown
+      loadCommodities(commoditySelect);
+
+      addNewBtn.addEventListener('click', () => {
+        openAddCommodityModal(commoditySelect);
+      });
+
+      // Handle commodity selection
+      commoditySelect.addEventListener('change', () => {
+        const selectedCommodity = commoditySelect.value;
+        console.log('productVarieties:', productVarieties);
+        console.log('selectedCommodity:', selectedCommodity);
+        varietySelect.innerHTML = '<option value="">Select a product variety</option>';
+        if (selectedCommodity) {
+          varietySelect.disabled = false;
+          const filteredVarieties = productVarieties.filter(p => p.commodity_id === selectedCommodity);
+          console.log('filteredVarieties:', filteredVarieties);
+          filteredVarieties.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = `${item.product_name} - ${item.variety_name}`;
+            varietySelect.appendChild(option);
+          });
+        } else {
+          varietySelect.disabled = true;
+          varietySelect.innerHTML = '<option value="">Select a commodity first</option>';
+        }
+      });
+
+      container.appendChild(productForm);
+
+      productForm.querySelector('.remove-product-btn').addEventListener('click', () => {
+        productForm.remove();
+      });
+    }
+
+    window.logout = logout;
+    window.onload = async () => {
+        const loader = document.getElementById("loader");
+        if (loader) {
+            loader.style.display = "block";
+        }
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            window.location.href = 'login.html';
+        } else {
+            const { data: userProfile, error } = await supabase
+              .from('app_user')
+              .select('full_name, role')
+              .eq('id', user.id)
+              .single();
+
+            if (userProfile) {
+              document.getElementById('user-full-name').textContent = userProfile.full_name;
+              const userRoleEmailEl = document.getElementById('user-role-email');
+              userRoleEmailEl.textContent = `${userProfile.role} | ${user.email}`;
+              userRoleEmailEl.title = `${userProfile.role} | ${user.email}`;
+              document.getElementById('welcome-message').textContent = `Welcome back, ${userProfile.full_name}!`;
+            }
+            
+            await Promise.all([
+              loadDashboardStats(),
+              loadShipments(),
+              loadFilterOptions()
+            ]);
+        }
+
+        if (loader) {
+            loader.style.display = "none";
+        }
+
+        document.getElementById('filter-toggle-btn').addEventListener('click', toggleFilterPane);
+
+        document.getElementById('apply-filters-btn').addEventListener('click', () => {
+            const filters = {
+                supplier_id: document.getElementById('supplier-filter').value || null,
+                clearing_agent_id: document.getElementById('clearing-agent-filter').value || null,
+                bank_id: document.getElementById('bank-filter').value || null,
+                status: document.getElementById('status-filter').value || null,
+                commodity: document.getElementById('commodity-filter').value || null,
+                lc_number: document.getElementById('lc-number-filter').value || null,
+                product_name: document.getElementById('product-name-filter').value || null,
+                variety_name: document.getElementById('variety-name-filter').value || null
+            };
+            loadShipments(document.getElementById('shipment-search').value, filters);
+            updateFilterBadge();
+        });
+
+        document.getElementById('clear-filters-btn').addEventListener('click', () => {
+            document.getElementById('supplier-filter').value = '';
+            document.getElementById('clearing-agent-filter').value = '';
+            document.getElementById('bank-filter').value = '';
+            document.getElementById('status-filter').value = '';
+            document.getElementById('commodity-filter').value = '';
+            document.getElementById('lc-number-filter').value = '';
+            document.getElementById('product-name-filter').value = '';
+            document.getElementById('variety-name-filter').value = '';
+            loadShipments(document.getElementById('shipment-search').value);
+            updateFilterBadge();
+        });
+
+        function updateFilterBadge() {
+          const filters = {
+              supplier_id: document.getElementById('supplier-filter').value,
+              clearing_agent_id: document.getElementById('clearing-agent-filter').value,
+              bank_id: document.getElementById('bank-filter').value,
+              status: document.getElementById('status-filter').value,
+              commodity: document.getElementById('commodity-filter').value,
+              lc_number: document.getElementById('lc-number-filter').value,
+              product_name: document.getElementById('product-name-filter').value,
+              variety_name: document.getElementById('variety-name-filter').value
+          };
+          const activeFilters = Object.values(filters).filter(v => v !== '' && v !== null).length;
+          const badge = document.getElementById('filter-count-badge');
+          if (activeFilters > 0) {
+            badge.textContent = activeFilters;
+            badge.style.display = 'inline';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
+        const searchInput = document.getElementById('shipment-search');
+        searchInput.addEventListener('input', debounce((e) => {
+          loadShipments(e.target.value);
+        }, 300));
+
+        document.getElementById('add-product-btn').addEventListener('click', addProductForm);
+
+        document.getElementById('create-shipment-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const messageDiv = document.getElementById('create-shipment-message');
+          const { data: { user } } = await supabase.auth.getUser();
+
+          // 1. Create the shipment
+          const shipmentType = document.querySelector('[name="type"]').value;
+          const reference_code = `${shipmentType}-${Date.now()}`;
+          const { data: shipment, error: shipmentError } = await supabase
+            .from('shipment')
+            .insert({ reference_code: reference_code, created_by: user.id, type: shipmentType })
+            .select()
+            .single();
+
+          if (shipmentError) {
+            messageDiv.innerHTML = `<p class="error-message">Error creating shipment: ${shipmentError.message}</p>`;
+            return;
+          }
+
+          // 2. Gather product data
+          const productForms = document.querySelectorAll('.product-form-item');
+          const productsToInsert = [];
+          productForms.forEach(form => {
+            productsToInsert.push({
+              shipment_id: shipment.id,
+              product_variety_id: form.querySelector('[name="product_variety_id"]').value,
+              quantity: form.querySelector('[name="quantity"]').value,
+              unit: form.querySelector('[name="unit"]').value
+            });
+          });
+
+          // 3. Insert products
+          const { error: productsError } = await supabase
+            .from('shipment_products')
+            .insert(productsToInsert);
+
+          if (productsError) {
+            messageDiv.innerHTML = `<p class="error-message">Error adding products to shipment: ${productsError.message}</p>`;
+            // Optionally, delete the created shipment if products fail to add
+            await supabase.from('shipment').delete().eq('id', shipment.id);
+          } else {
+            messageDiv.innerHTML = `<p class="success-message">Shipment created successfully!</p>`;
+            document.getElementById('create-shipment-form').reset();
+            closeCreateShipmentModal();
+            loadShipments();
+            loadDashboardStats();
+          }
+        });
+
+        document.getElementById('create-shipment-btn').addEventListener('click', openCreateShipmentModal);
+        document.getElementById('close-modal-btn').addEventListener('click', closeCreateShipmentModal);
+        document.getElementById('close-add-commodity-modal-btn').addEventListener('click', closeAddCommodityModal);
+
+        document.getElementById('add-commodity-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const newCommodityName = document.getElementById('new_commodity_name').value;
+          const messageDiv = document.getElementById('add-commodity-message');
+
+          const { data, error } = await supabase.from('commodity').insert({ name: newCommodityName }).select().single();
+
+          if (error) {
+            messageDiv.innerHTML = `<p class="error-message">Error adding commodity: ${error.message}</p>`;
+          } else {
+            messageDiv.innerHTML = `<p class="success-message">Commodity added successfully!</p>`;
+            document.getElementById('add-commodity-form').reset();
+            closeAddCommodityModal();
+            
+            if (activeCommoditySelect) {
+              const option = document.createElement('option');
+              option.value = data.id;
+              option.textContent = data.name;
+              option.selected = true;
+              activeCommoditySelect.appendChild(option);
+              activeCommoditySelect.dispatchEvent(new Event('change'));
+            }
+          }
+        });
+    };
+  </script>
+</head>
+<body>
+  <div class="loader-overlay" id="loader">
+    <div class="loader">
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+      <div class="loader-dot"></div>
+    </div>
+  </div>
+  <aside class="sidebar">
+     <div class="sidebar-header">
+      <img src="https://i.postimg.cc/j5K3DCyc/20250826-1802-Imports-360-Logo-simple-compose-01k3k7grx1f2fsmtvdcvwbx54s.png" alt="Logo" class="sidebar-logo">
+      <button class="sidebar-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <ul>
+        <li>
+          <a href="admin-dashboard.html" class="nav-link active">
+            <i class="fas fa-home icon"></i>
+            <span class="text">Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="documents.html" class="nav-link">
+            <i class="fas fa-file-alt icon"></i>
+            <span class="text">Documents</span>
+          </a>
+        </li>
+        <li>
+          <a href="forecast.html" class="nav-link">
+            <i class="fas fa-bullhorn icon"></i>
+            <span class="text">Forecasts</span>
+          </a>
+        </li>
+        <li><a href="verification-list.html" class="nav-link"><i class="fas fa-check-double icon"></i><span class="text">Verification List</span></a></li>
+        <li>
+          <a href="#" class="nav-link has-submenu">
+            <i class="fas fa-box icon"></i>
+            <span class="text">Shipments</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu">
+            <li><a href="shipment_tracker.html" class="nav-link"><span class="text">Shipment Tracker</span></a></li>
+            <li><a href="shipment-details.html" class="nav-link"><span class="text">All Shipments</span></a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="product-details.html" class="nav-link">
+            <i class="fas fa-tags icon"></i>
+            <span class="text">Products</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-details.html" class="nav-link">
+            <i class="fas fa-truck icon"></i>
+            <span class="text">Suppliers</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-shipment-responses.html" class="nav-link">
+            <i class="fas fa-inbox icon"></i>
+            <span class="text">Supplier Responses</span>
+          </a>
+        </li>
+        <li>
+          <a href="bank-details.html" class="nav-link">
+            <i class="fas fa-university icon"></i>
+            <span class="text">Banks</span>
+          </a>
+        </li>
+        <li>
+          <a href="clearing-agent-details.html" class="nav-link">
+            <i class="fas fa-user-shield icon"></i>
+            <span class="text">Clearing Agents</span>
+          </a>
+        </li>
+        <li>
+          <a href="warehouse-details.html" class="nav-link">
+            <i class="fas fa-warehouse icon"></i>
+            <span class="text">Warehouses</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu open">
+            <i class="fas fa-truck-ramp-box icon"></i>
+            <span class="text">Freight</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu open">
+            <li><a href="send-freight-queries.html" class="nav-link"><span class="text">Send Freight Queries</span></a></li>
+            <li><a href="freight-query-response.html" class="nav-link"><span class="text">Freight Query Response</span></a></li>
+            <li><a href="manage-freight-queries.html" class="nav-link"><span class="text">Manage Freight Queries</span></a></li>
+            <li><a href="award-shipment.html" class="nav-link"><span class="text">Award Shipment</span></a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-title">
+        <h1>Dashboard</h1>
+        <p id="welcome-message">Welcome back!</p>
+      </div>
+      <div class="user-menu">
+        <button class="user-menu-button" id="user-menu-button">
+          <i class="fas fa-user-circle"></i>
+        </button>
+        <div class="dropdown-menu" id="dropdown-menu">
+          <div class="user-info">
+            <p id="user-full-name">Loading...</p>
+            <span id="user-role-email"></span>
+          </div>
+          <button class="logout-button" onclick="logout()">
+            <i class="fas fa-sign-out-alt"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="dashboard-stats">
+       <div class="stat-card">
+        <div class="icon-container" style="background-color: #e0e7ff; color: #4f46e5;">
+          <i class="fas fa-boxes-stacked"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Total Shipments</h3>
+          <p id="total-shipments">0</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="icon-container" style="background-color: #dcfce7; color: #166534;">
+          <i class="fas fa-truck-fast"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Active Shipments</h3>
+          <p id="active-shipments">0</p>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="icon-container" style="background-color: #f3e8ff; color: #86198f;">
+          <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="stat-info">
+          <h3>Completed</h3>
+          <p id="completed-shipments">0</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>All Shipments</h2>
+        <div class="search-container">
+          <i class="fas fa-search"></i>
+          <input type="text" id="shipment-search" placeholder="Search shipments...">
+        </div>
+        <button id="filter-toggle-btn" class="button button-secondary">
+          <i class="fas fa-filter"></i>
+          <span>Filters</span>
+          <span id="filter-count-badge" class="badge" style="display: none;"></span>
+        </button>
+        <button id="create-shipment-btn" class="button">Create New Shipment</button>
+      </div>
+      <div class="filter-pane" id="filter-pane">
+        <div class="filter-group">
+          <label for="supplier-filter">Supplier</label>
+          <select id="supplier-filter"></select>
+        </div>
+        <div class="filter-group">
+          <label for="clearing-agent-filter">Clearing Agent</label>
+          <select id="clearing-agent-filter"></select>
+        </div>
+        <div class="filter-group">
+          <label for="bank-filter">Bank</label>
+          <select id="bank-filter"></select>
+        </div>
+        <div class="filter-group">
+            <label for="status-filter">Status</label>
+            <select id="status-filter">
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="on_hold">On Hold</option>
+                <option value="cancelled">Cancelled</option>
+            </select>
+        </div>
+        <div class="filter-group">
+          <label for="commodity-filter">Commodity</label>
+          <select id="commodity-filter"></select>
+        </div>
+        <div class="filter-group">
+          <label for="lc-number-filter">LC Number</label>
+          <input type="text" id="lc-number-filter" placeholder="Enter LC Number">
+        </div>
+        <div class="filter-group">
+          <label for="product-name-filter">Product Name</label>
+          <input type="text" id="product-name-filter" placeholder="Enter Product Name">
+        </div>
+        <div class="filter-group">
+          <label for="variety-name-filter">Variety Name</label>
+          <input type="text" id="variety-name-filter" placeholder="Enter Variety Name">
+        </div>
+        <div class="button-container">
+            <button id="apply-filters-btn" class="button">Apply</button>
+            <button id="clear-filters-btn" class="button button-secondary">Clear</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>Reference</th><th>Product Name</th><th>Variety Name</th><th>Supplier</th><th>Stage</th><th>Status</th><th>LC Number</th><th>Action</th></tr>
+            </thead>
+            <tbody id="shipments-table-body">
+              <!-- Rows will be injected by JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<div id="create-shipment-modal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <span class="close-button" id="close-modal-btn">&times;</span>
+    <h2>Create New Shipment</h2>
+    <div id="create-shipment-message"></div>
+    <form id="create-shipment-form">
+      <div id="product-list-container"></div>
+      <button type="button" id="add-product-btn" class="button button-secondary">Add Product</button>
+      <hr>
+      <div>
+        <label>Shipment Type:</label>
+        <select name="type" required>
+          <option value="LC">LC</option>
+          <option value="DP">DP</option>
+        </select>
+      </div>
+      <button type="submit">Create Shipment</button>
+    </form>
+  </div>
+</div>
+<div id="add-commodity-modal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <span class="close-button" id="close-add-commodity-modal-btn">&times;</span>
+    <h2>Add New Commodity</h2>
+    <div id="add-commodity-message"></div>
+    <form id="add-commodity-form">
+      <div>
+        <label for="new_commodity_name">Commodity Name:</label>
+        <input type="text" id="new_commodity_name" name="new_commodity_name" required>
+      </div>
+      <button type="submit">Save Commodity</button>
+    </form>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarToggle = document.querySelector('.sidebar-toggle');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const hasSubmenus = document.querySelectorAll('.has-submenu');
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+
+    function handleMediaQueryChange(e) {
+        if (e.matches) {
+            sidebar.classList.remove('collapsed');
+            sidebar.classList.remove('open');
+        } else {
+            sidebar.classList.remove('open');
+        }
+    }
+
+    handleMediaQueryChange(mediaQuery);
+    mediaQuery.addListener(handleMediaQueryChange);
+
+    sidebarToggle.addEventListener('click', () => {
+        if (mediaQuery.matches) {
+            sidebar.classList.toggle('open');
+        } else {
+            sidebar.classList.toggle('collapsed');
+        }
+    });
+
+    hasSubmenus.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            const submenu = item.nextElementSibling;
+            if (submenu && submenu.classList.contains('submenu')) {
+                submenu.classList.toggle('open');
+                item.classList.toggle('open');
+            }
+        });
+    });
+
+    const currentPath = window.location.pathname.split('/').pop();
+    navLinks.forEach(link => {
+        if (link.href.split('/').pop() === currentPath) {
+            link.classList.add('active');
+            let parentSubmenu = link.closest('.submenu');
+            if (parentSubmenu) {
+                parentSubmenu.classList.add('open');
+                let parentHasSubmenu = parentSubmenu.previousElementSibling;
+                if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+                    parentHasSubmenu.classList.add('open');
+                }
+            }
+        }
+    });
+
+    const userMenuButton = document.getElementById('user-menu-button');
+    const dropdownMenu = document.getElementById('dropdown-menu');
+
+    if (userMenuButton) {
+        userMenuButton.addEventListener('click', () => {
+            dropdownMenu.classList.toggle('show');
+        });
+    }
+
+    window.addEventListener('click', (event) => {
+        if (userMenuButton && !userMenuButton.contains(event.target) && dropdownMenu && !dropdownMenu.contains(event.target)) {
+            dropdownMenu.classList.remove('show');
+        }
+    });
+});
+</script>
+</body>
+</html>
