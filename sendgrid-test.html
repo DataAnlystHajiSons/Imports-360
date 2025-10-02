@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SendGrid Email Test - Imports 360</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #7C3AED;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #7C3AED;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #1E293B;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #374151;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        button {
+            background: #7C3AED;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #6D28D9;
+        }
+        button:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success {
+            background: #D1FAE5;
+            border: 1px solid #10B981;
+            color: #047857;
+        }
+        .error {
+            background: #FEE2E2;
+            border: 1px solid #EF4444;
+            color: #DC2626;
+        }
+        .info {
+            background: #EEF2FF;
+            border: 1px solid #7C3AED;
+            color: #5B21B6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 SendGrid Email Test</h1>
+        
+        <div class="info">
+            <strong>📋 Setup Required:</strong><br>
+            Make sure you've added these environment variables to your Supabase project:
+            <ul>
+                <li><code>SENDGRID_API_KEY</code> - Your SendGrid API key</li>
+                <li><code>FROM_EMAIL</code> - Your verified sender email</li>
+                <li><code>APP_URL</code> - Your application URL</li>
+            </ul>
+        </div>
+
+        <!-- Test 1: Freight Query Email -->
+        <div class="test-section">
+            <h3>🚛 Test Freight Query Email</h3>
+            <div class="form-group">
+                <label for="freight-email">Recipient Email:</label>
+                <input type="email" id="freight-email" placeholder="test@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="quote-url">Quote URL:</label>
+                <input type="url" id="quote-url" placeholder="https://example.com/quote/123" required>
+            </div>
+            <button onclick="testFreightQuery()">Send Test Email</button>
+            <div id="freight-result"></div>
+        </div>
+
+        <!-- Test 2: Supplier Documents Email -->
+        <div class="test-section">
+            <h3>📋 Test Supplier Documents Email</h3>
+            <div class="form-group">
+                <label for="supplier-email">Supplier Email:</label>
+                <input type="email" id="supplier-email" placeholder="supplier@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="shipment-ref">Shipment Reference:</label>
+                <input type="text" id="shipment-ref" placeholder="SP-2025-001" required>
+            </div>
+            <div class="form-group">
+                <label for="shipment-id">Shipment ID:</label>
+                <input type="text" id="shipment-id" placeholder="uuid-here" required>
+            </div>
+            <button onclick="testSupplierDocs()">Send Test Email (No Attachments)</button>
+            <div id="supplier-result"></div>
+        </div>
+
+        <!-- Test 3: Sowing Alerts (Manual Trigger) -->
+        <div class="test-section">
+            <h3>🌱 Test Sowing Alerts</h3>
+            <p><strong>Note:</strong> This function reads from your database and sends alerts automatically.</p>
+            <button onclick="testSowingAlerts()">Trigger Sowing Alerts Check</button>
+            <div id="sowing-result"></div>
+        </div>
+    </div>
+
+    <script>
+        // Replace with your actual Supabase project URL and anon key
+        const SUPABASE_URL = 'https://sfknzqkiqxivzcualcau.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA';
+
+        async function testFreightQuery() {
+            const button = document.querySelector('[onclick="testFreightQuery()"]');
+            const result = document.getElementById('freight-result');
+            
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            const email = document.getElementById('freight-email').value;
+            const quoteUrl = document.getElementById('quote-url').value;
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-freight-query-email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        quote_url: quoteUrl
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="result success">✅ ${data.message}</div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="result error">❌ Network Error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Send Test Email';
+        }
+
+        async function testSupplierDocs() {
+            const button = document.querySelector('[onclick="testSupplierDocs()"]');
+            const result = document.getElementById('supplier-result');
+            
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            const email = document.getElementById('supplier-email').value;
+            const shipmentRef = document.getElementById('shipment-ref').value;
+            const shipmentId = document.getElementById('shipment-id').value;
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-supplier-docs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        to: email,
+                        attachments: [], // Empty for test
+                        shipment_ref: shipmentRef,
+                        shipment_id: shipmentId
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="result success">✅ ${data.message}</div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="result error">❌ Network Error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Send Test Email (No Attachments)';
+        }
+
+        async function testSowingAlerts() {
+            const button = document.querySelector('[onclick="testSowingAlerts()"]');
+            const result = document.getElementById('sowing-result');
+            
+            button.disabled = true;
+            button.textContent = 'Checking...';
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-sowing-alerts`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="result success">✅ ${data.message}</div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="result error">❌ Network Error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Trigger Sowing Alerts Check';
+        }
+    </script>
+</body>
+</html>

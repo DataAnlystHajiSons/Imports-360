@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Imports 360 - Send Freight Queries</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <aside class="sidebar">
+     <div class="sidebar-header">
+      <img src="https://i.postimg.cc/j5K3DCyc/20250826-1802-Imports-360-Logo-simple-compose-01k3k7grx1f2fsmtvdcvwbx54s.png" alt="Logo" class="sidebar-logo">
+      <button class="sidebar-toggle">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    <nav class="sidebar-nav">
+      <ul>
+        <li>
+          <a href="admin-dashboard.html" class="nav-link">
+            <i class="fas fa-home icon"></i>
+            <span class="text">Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="documents.html" class="nav-link">
+            <i class="fas fa-file-alt icon"></i>
+            <span class="text">Documents</span>
+          </a>
+        </li>
+        <li>
+          <a href="forecast.html" class="nav-link">
+            <i class="fas fa-bullhorn icon"></i>
+            <span class="text">Forecasts</span>
+          </a>
+        </li>
+        <li><a href="verification-list.html" class="nav-link"><i class="fas fa-check-double icon"></i><span class="text">Verification List</span></a></li>
+        <li>
+          <a href="#" class="nav-link has-submenu">
+            <i class="fas fa-box icon"></i>
+            <span class="text">Shipments</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu">
+            <li><a href="shipment_tracker.html" class="nav-link"><span class="text">Shipment Tracker</span></a></li>
+            <li><a href="shipment-details.html" class="nav-link"><span class="text">All Shipments</span></a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="product-details.html" class="nav-link">
+            <i class="fas fa-tags icon"></i>
+            <span class="text">Products</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-details.html" class="nav-link">
+            <i class="fas fa-truck icon"></i>
+            <span class="text">Suppliers</span>
+          </a>
+        </li>
+        <li>
+          <a href="supplier-shipment-responses.html" class="nav-link">
+            <i class="fas fa-inbox icon"></i>
+            <span class="text">Supplier Responses</span>
+          </a>
+        </li>
+        <li>
+          <a href="bank-details.html" class="nav-link">
+            <i class="fas fa-university icon"></i>
+            <span class="text">Banks</span>
+          </a>
+        </li>
+        <li>
+          <a href="clearing-agent-details.html" class="nav-link">
+            <i class="fas fa-user-shield icon"></i>
+            <span class="text">Clearing Agents</span>
+          </a>
+        </li>
+        <li>
+          <a href="warehouse-details.html" class="nav-link">
+            <i class="fas fa-warehouse icon"></i>
+            <span class="text">Warehouses</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="nav-link has-submenu open">
+            <i class="fas fa-truck-ramp-box icon"></i>
+            <span class="text">Freight</span>
+            <span class="arrow"><i class="fas fa-chevron-down"></i></span>
+          </a>
+          <ul class="submenu open">
+            <li><a href="send-freight-queries.html" class="nav-link active"><span class="text">Send Freight Queries</span></a></li>
+            <li><a href="freight-query-response.html" class="nav-link"><span class="text">Freight Query Response</span></a></li>
+            <li><a href="manage-freight-queries.html" class="nav-link"><span class="text">Manage Freight Queries</span></a></li>
+            <li><a href="award-shipment.html" class="nav-link"><span class="text">Award Shipment</span></a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-title">
+        <button class="back-button" onclick="window.history.back();"><i class="fas fa-arrow-left"></i></button>
+        <h1>Send Freight Queries</h1>
+      </div>
+    </header>
+    <div class="panel">
+      <div class="panel-body">
+        <div id="message"></div>
+        <form id="send-queries-form" onsubmit="event.preventDefault(); sendQueries();">
+          <div class="form-section">
+            <h2>1. Select Shipment</h2>
+            <select id="shipment-select" required>
+              <option value="">Loading shipments...</option>
+            </select>
+            <div id="shipment-details" class="panel" style="display: none; margin-top: 20px;"></div>
+          </div>
+
+          <div class="form-section">
+            <h2>2. Select Logistics Companies</h2>
+            <div id="logistics-companies-list">
+              <p>Loading companies...</p>
+            </div>
+          </div>
+
+          <div class="button-container">
+            <button type="submit">Send Queries</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+  import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
+  const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
+
+  let logisticsCompanies = [];
+
+  function showMessage(message, isError = false) {
+    const messageDiv = document.getElementById('message');
+    messageDiv.innerHTML = `<p class="${isError ? 'error-message' : 'success-message'}">${message}</p>`;
+    window.scrollTo(0, 0);
+  }
+
+  async function loadPageData() {
+    // Load shipments
+    const { data: shipments, error: shipmentError } = await supabase
+      .from('shipment')
+      .select('id, reference_code, current_stage'); // Only show shipments ready for freight query
+
+    if (shipmentError) {
+      console.error(shipmentError);
+      return;
+    }
+
+    const shipmentSelect = document.getElementById('shipment-select');
+    shipmentSelect.innerHTML = '<option value="">Select a shipment</option>';
+    shipments.forEach(s => {
+      const option = document.createElement('option');
+      option.value = s.id;
+      option.textContent = s.reference_code;
+      shipmentSelect.appendChild(option);
+    });
+
+    // Load logistics companies
+    const { data: companies, error: companyError } = await supabase
+      .from('logistics_company')
+      .select('id, name, contact_email');
+
+    if (companyError) {
+      console.error(companyError);
+      return;
+    }
+    logisticsCompanies = companies;
+
+    const companiesListDiv = document.getElementById('logistics-companies-list');
+    let companiesHtml = '';
+    companies.forEach(c => {
+      companiesHtml += `
+        <div>
+          <input type="checkbox" id="company-${c.id}" name="logistics_company" value="${c.id}">
+          <label for="company-${c.id}">${c.name}</label>
+        </div>
+      `;
+    });
+    companiesListDiv.innerHTML = companiesHtml;
+  }
+
+  async function handleShipmentSelect(event) {
+    const shipmentId = event.target.value;
+    const shipmentDetailsDiv = document.getElementById('shipment-details');
+    if (!shipmentId) {
+      shipmentDetailsDiv.style.display = 'none';
+      return;
+    }
+
+    const { data: shipment, error } = await supabase
+      .from('v_shipments_with_details')
+      .select('*')
+      .eq('id', shipmentId)
+      .single();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    shipmentDetailsDiv.innerHTML = `
+      <div class="panel-body">
+        <h4>Shipment Details</h4>
+        <p><strong>Reference:</strong> ${shipment.reference_code}</p>
+        <p><strong>Product:</strong> ${shipment.product_name} - ${shipment.variety_name}</p>
+        <p><strong>Supplier:</strong> ${shipment.supplier_name}</p>
+      </div>
+    `;
+    shipmentDetailsDiv.style.display = 'block';
+  }
+
+  async function sendQueries() {
+    const sendButton = document.querySelector('#send-queries-form button');
+    sendButton.disabled = true;
+    sendButton.innerHTML = 'Sending...';
+
+    const shipmentId = document.getElementById('shipment-select').value;
+    if (!shipmentId) {
+      showMessage('Please select a shipment.', true);
+      sendButton.disabled = false;
+      sendButton.innerHTML = 'Send Queries';
+      return;
+    }
+
+    const selectedCompanyIds = Array.from(document.querySelectorAll('input[name="logistics_company"]:checked')).map(cb => cb.value);
+
+    if (selectedCompanyIds.length === 0) {
+      showMessage('Please select at least one logistics company.', true);
+      sendButton.disabled = false;
+      sendButton.innerHTML = 'Send Queries';
+      return;
+    }
+
+    const queriesToInsert = selectedCompanyIds.map(companyId => ({
+      shipment_id: shipmentId,
+      logistics_company_id: companyId,
+    }));
+
+    const { data: newQueries, error } = await supabase
+      .from('freight_query')
+      .insert(queriesToInsert)
+      .select();
+
+    if (error) {
+      showMessage(`Error creating freight queries: ${error.message}`, true);
+      sendButton.disabled = false;
+      sendButton.innerHTML = 'Send Queries';
+      return;
+    }
+
+    const emailPromises = newQueries.map(newQuery => {
+      const company = logisticsCompanies.find(c => c.id === newQuery.logistics_company_id);
+      if (company && company.contact_email) {
+        const quoteUrl = `${window.location.origin}/quote-submission.html?freight_query_id=${newQuery.id}`;
+        return supabase.functions.invoke('send-freight-query-email', {
+          body: { 
+            email: company.contact_email,
+            quote_url: quoteUrl
+          }
+        }).then(({ error }) => {
+          if (error) {
+            throw { companyName: company.name, error };
+          }
+          return { companyName: company.name, success: true };
+        });
+      }
+      return Promise.resolve({ companyName: company ? company.name : 'Unknown', success: false, error: 'No contact email' });
+    });
+
+    const results = await Promise.allSettled(emailPromises);
+
+    let allEmailsSent = true;
+    results.forEach(result => {
+      if (result.status === 'rejected') {
+        allEmailsSent = false;
+        showMessage(`Failed to send email to ${result.reason.companyName}: ${result.reason.error.message}`, true);
+        console.error(`Failed to send email to ${result.reason.companyName}:`, result.reason.error);
+      } else if (result.value.success) {
+        showMessage(`Successfully sent email to ${result.value.companyName}.`);
+      }
+    });
+
+    if(allEmailsSent) {
+        showMessage('All freight queries sent successfully!');
+    } else {
+        showMessage('Some freight queries were sent, but there were errors sending one or more emails. Please check the console for details.', true);
+    }
+    
+    sendButton.disabled = false;
+    sendButton.innerHTML = 'Send Queries';
+  }
+
+  document.getElementById('shipment-select').addEventListener('change', handleShipmentSelect);
+  window.sendQueries = sendQueries;
+  window.onload = () => {
+    // Keep the existing onload logic from the template
+    const userCheck = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            window.location.href = 'login.html';
+        }
+    };
+    userCheck();
+    loadPageData();
+
+    // And add the sidebar logic
+    const sidebar = document.querySelector('.sidebar');
+    const sidebarToggle = document.querySelector('.sidebar-toggle');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const hasSubmenus = document.querySelectorAll('.has-submenu');
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+
+    function handleMediaQueryChange(e) {
+      if (e.matches) {
+        sidebar.classList.remove('collapsed');
+        sidebar.classList.remove('open');
+      } else {
+        sidebar.classList.remove('open');
+      }
+    }
+
+    handleMediaQueryChange(mediaQuery);
+    mediaQuery.addListener(handleMediaQueryChange);
+
+    sidebarToggle.addEventListener('click', () => {
+      if (mediaQuery.matches) {
+        sidebar.classList.toggle('open');
+      } else {
+        sidebar.classList.toggle('collapsed');
+      }
+    });
+
+    hasSubmenus.forEach(item => {
+      item.addEventListener('click', (e) => {
+        e.preventDefault();
+        const submenu = item.nextElementSibling;
+        if (submenu && submenu.classList.contains('submenu')) {
+          submenu.classList.toggle('open');
+          item.classList.toggle('open');
+        }
+      });
+    });
+
+    const currentPath = window.location.pathname.split('/').pop();
+    navLinks.forEach(link => {
+      if (link.href.split('/').pop() === currentPath) {
+        link.classList.add('active');
+        let parentSubmenu = link.closest('.submenu');
+        if (parentSubmenu) {
+          parentSubmenu.classList.add('open');
+          let parentHasSubmenu = parentSubmenu.previousElementSibling;
+          if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+            parentHasSubmenu.classList.add('open');
+          }
+        }
+      }
+    });
+  };
+
+</script>
+</body>
+</html>

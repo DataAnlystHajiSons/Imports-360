@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SendGrid Sender Identity Checker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f8f9fa;
+            line-height: 1.6;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #7C3AED;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .error-box {
+            background: #FEE2E2;
+            border: 2px solid #DC2626;
+            color: #991B1B;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .fix-steps {
+            background: #EEF2FF;
+            border: 2px solid #7C3AED;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .step {
+            background: white;
+            margin: 15px 0;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #7C3AED;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #1E293B;
+        }
+        .code {
+            background: #F3F4F6;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .highlight {
+            background: #FEF3C7;
+            padding: 2px 4px;
+            border-radius: 4px;
+            color: #92400E;
+            font-weight: bold;
+        }
+        .success {
+            background: #D1FAE5;
+            border: 2px solid #10B981;
+            color: #047857;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .warning {
+            background: #FEF3C7;
+            border: 2px solid #F59E0B;
+            color: #92400E;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        button {
+            background: #7C3AED;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #6D28D9;
+        }
+        .checklist {
+            margin: 20px 0;
+        }
+        .checklist li {
+            margin: 8px 0;
+            padding: 8px;
+            background: #F9FAFB;
+            border-radius: 4px;
+        }
+        .checklist li:before {
+            content: "☐ ";
+            font-weight: bold;
+            color: #7C3AED;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 SendGrid Sender Identity Fix</h1>
+        
+        <div class="error-box">
+            <h3>❌ Error Detected:</h3>
+            <p><strong>"The from address does not match a verified Sender Identity"</strong></p>
+            <p>Your <span class="highlight">FROM_EMAIL</span> environment variable doesn't match your verified SendGrid sender email.</p>
+        </div>
+
+        <div class="fix-steps">
+            <h2>📋 Step-by-Step Fix</h2>
+
+            <div class="step">
+                <h3>1. Check Your SendGrid Verified Sender</h3>
+                <p>Go to your SendGrid Dashboard:</p>
+                <div class="code">
+                    SendGrid Dashboard → Settings → Sender Authentication → Single Sender Verification
+                </div>
+                <p>Copy the <strong>exact email address</strong> that shows as "Verified" ✅</p>
+                <button onclick="window.open('https://app.sendgrid.com/settings/sender_auth', '_blank')">
+                    Open SendGrid Sender Auth
+                </button>
+            </div>
+
+            <div class="step">
+                <h3>2. Update Supabase Environment Variable</h3>
+                <p>Go to your Supabase Dashboard and update the FROM_EMAIL variable:</p>
+                <div class="code">
+                    Supabase Dashboard → Settings → Edge Functions → Environment Variables
+                    
+                    Variable: FROM_EMAIL
+                    Value: your-verified-sendgrid-email@domain.com
+                </div>
+                <button onclick="window.open('https://supabase.com/dashboard/project/sfknzqkiqxivzcualcau/settings/functions', '_blank')">
+                    Open Supabase Settings
+                </button>
+            </div>
+
+            <div class="step">
+                <h3>3. Redeploy Functions</h3>
+                <p>Environment variables only take effect after redeployment:</p>
+                <div class="code">
+supabase functions deploy send-supplier-docs
+supabase functions deploy send-freight-query-email  
+supabase functions deploy send-sowing-alerts
+                </div>
+            </div>
+
+            <div class="step">
+                <h3>4. Test the Fix</h3>
+                <p>Try sending an email again. It should work now!</p>
+                <button onclick="testEmail()">Test Email Function</button>
+                <div id="test-result"></div>
+            </div>
+        </div>
+
+        <div class="warning">
+            <h3>⚠️ Common Issues:</h3>
+            <ul class="checklist">
+                <li>Make sure the email is exactly the same (case-sensitive)</li>
+                <li>Don't forget to redeploy after changing environment variables</li>
+                <li>Verify the sender in SendGrid first before using it</li>
+                <li>Check for typos in the email address</li>
+            </ul>
+        </div>
+
+        <div class="success">
+            <h3>✅ Alternative Solutions:</h3>
+            <p><strong>If you don't have a verified sender yet:</strong></p>
+            <ol>
+                <li>Go to SendGrid → Settings → Sender Authentication</li>
+                <li>Click "Create New Sender" in Single Sender Verification</li>
+                <li>Add your desired email address</li>
+                <li>Check your email and click the verification link</li>
+                <li>Update the FROM_EMAIL variable with the verified email</li>
+                <li>Redeploy the functions</li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>🎯 Quick Test Commands</h3>
+            <p>Once you've updated the environment variable and redeployed, test with:</p>
+            <div class="code">
+curl -X POST 'https://sfknzqkiqxivzcualcau.supabase.co/functions/v1/send-supplier-docs' \
+-H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA' \
+-H 'Content-Type: application/json' \
+-d '{"to":"test@example.com","attachments":[],"shipment_ref":"SP-TEST","shipment_id":"123"}'
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function testEmail() {
+            const button = event.target;
+            const result = document.getElementById('test-result');
+            
+            button.disabled = true;
+            button.textContent = 'Testing...';
+            
+            try {
+                const response = await fetch('https://sfknzqkiqxivzcualcau.supabase.co/functions/v1/send-supplier-docs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA'
+                    },
+                    body: JSON.stringify({
+                        to: 'test@example.com',
+                        attachments: [],
+                        shipment_ref: 'SP-TEST',
+                        shipment_id: '123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = '<div class="success">✅ Email sent successfully! The fix worked.</div>';
+                } else {
+                    result.innerHTML = `<div class="error-box">❌ Still getting error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="error-box">❌ Network error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Test Email Function';
+        }
+    </script>
+</body>
+</html>

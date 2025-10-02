@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SendGrid Simple Test - No Attachments</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #7C3AED;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #7C3AED;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #374151;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #D1D5DB;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        button {
+            background: #7C3AED;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #6D28D9;
+        }
+        button:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .success {
+            background: #D1FAE5;
+            border: 1px solid #10B981;
+            color: #047857;
+        }
+        .error {
+            background: #FEE2E2;
+            border: 1px solid #EF4444;
+            color: #DC2626;
+        }
+        .debug {
+            background: #EEF2FF;
+            border: 1px solid #7C3AED;
+            color: #5B21B6;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .info {
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            color: #92400E;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 SendGrid Debug Test</h1>
+        
+        <div class="info">
+            <strong>🎯 Purpose:</strong> Test SendGrid without attachments to isolate the issue.<br>
+            This will help us see what SendGrid is actually responding with.
+        </div>
+
+        <div class="test-section">
+            <h3>📧 Simple Email Test (No Attachments)</h3>
+            <div class="form-group">
+                <label for="test-email">Your Email Address:</label>
+                <input type="email" id="test-email" placeholder="your-email@example.com" required>
+                <small>Use your own email to check if it arrives</small>
+            </div>
+            <button onclick="testSimpleEmail()">Send Simple Test Email</button>
+            <div id="simple-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Full Test (With Empty Attachments)</h3>
+            <div class="form-group">
+                <label for="supplier-email">Recipient Email:</label>
+                <input type="email" id="supplier-email" placeholder="test@example.com" required>
+            </div>
+            <button onclick="testFullEmail()">Send Full Email (No Attachments)</button>
+            <div id="full-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 Debug Information</h3>
+            <p>Check the debug info below to see what SendGrid is responding with:</p>
+            <div id="debug-info" class="result debug"></div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://sfknzqkiqxivzcualcau.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA';
+
+        function addDebugInfo(message) {
+            const debugDiv = document.getElementById('debug-info');
+            const timestamp = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+
+        async function testSimpleEmail() {
+            const button = document.querySelector('[onclick="testSimpleEmail()"]');
+            const result = document.getElementById('simple-result');
+            
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            const email = document.getElementById('test-email').value;
+            
+            if (!email) {
+                result.innerHTML = '<div class="result error">❌ Please enter your email address</div>';
+                button.disabled = false;
+                button.textContent = 'Send Simple Test Email';
+                return;
+            }
+
+            addDebugInfo('🚀 Starting simple email test...');
+            
+            try {
+                // Test with freight query function (simpler, no attachments)
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-freight-query-email`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        quote_url: 'https://test.com/quote/123'
+                    })
+                });
+                
+                addDebugInfo(`📨 Response Status: ${response.status}`);
+                addDebugInfo(`📨 Response Headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+                
+                const data = await response.json();
+                addDebugInfo(`📬 Response Data: ${JSON.stringify(data)}`);
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="result success">✅ ${data.message}<br><small>Check your email inbox and spam folder</small></div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                addDebugInfo(`❌ Network Error: ${error.message}`);
+                result.innerHTML = `<div class="result error">❌ Network Error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Send Simple Test Email';
+        }
+
+        async function testFullEmail() {
+            const button = document.querySelector('[onclick="testFullEmail()"]');
+            const result = document.getElementById('full-result');
+            
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            
+            const email = document.getElementById('supplier-email').value;
+            
+            if (!email) {
+                result.innerHTML = '<div class="result error">❌ Please enter a recipient email address</div>';
+                button.disabled = false;
+                button.textContent = 'Send Full Email (No Attachments)';
+                return;
+            }
+
+            addDebugInfo('🚀 Starting full email test (no attachments)...');
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-supplier-docs`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        to: email,
+                        attachments: [], // No attachments for testing
+                        shipment_ref: 'SP-DEBUG-TEST',
+                        shipment_id: 'debug-123'
+                    })
+                });
+                
+                addDebugInfo(`📨 Response Status: ${response.status}`);
+                addDebugInfo(`📨 Response Headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+                
+                const data = await response.json();
+                addDebugInfo(`📬 Response Data: ${JSON.stringify(data)}`);
+                
+                if (response.ok) {
+                    result.innerHTML = `<div class="result success">✅ ${data.message}<br><small>Attachments processed: ${data.attachments_count || 0}<br>Check your email inbox and spam folder</small></div>`;
+                } else {
+                    result.innerHTML = `<div class="result error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                addDebugInfo(`❌ Network Error: ${error.message}`);
+                result.innerHTML = `<div class="result error">❌ Network Error: ${error.message}</div>`;
+            }
+            
+            button.disabled = false;
+            button.textContent = 'Send Full Email (No Attachments)';
+        }
+
+        // Initialize debug area
+        addDebugInfo('🔍 Debug console initialized. Send an email to see detailed logs...');
+    </script>
+</body>
+</html>
