@@ -154,7 +154,7 @@
                 { name: "status", type: "select", label: "Status", options: ["Sended", "Arrived", "Pending"] },
                 { name: "sended_at", type: "datetime-local", label: "Sended At" },
                 { name: "uploaded_by", type: "uuid", label: "Uploaded By", fk: { relation: "app_user", displayColumn: "full_name" } },
-                { name: "docs_url", type: "text", label: "Docs URL", readonly: true },
+                { name: "file_url", type: "text", label: "Docs URL", readonly: true },
                 { name: "bank_id", type: "uuid", label: "Bank", fk: { relation: "bank", displayColumn: "name" } }
             ]
         },
@@ -3789,3 +3789,4 @@ Direct Data Count: ${directData?.length || 0}`);
 
     document.addEventListener('DOMContentLoaded', initializeTracker);
   
+
