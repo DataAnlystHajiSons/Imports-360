@@ -9,6 +9,199 @@
   import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.43.4/+esm";
   const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
 
+  // Searchable Dropdown Implementation
+  function createSearchableDropdown(selectElement, options, placeholder = 'Select an option') {
+    const container = document.createElement('div');
+    container.className = 'searchable-dropdown';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'dropdown-input';
+    input.placeholder = placeholder;
+    input.readOnly = true;
+    
+    const dropdownList = document.createElement('div');
+    dropdownList.className = 'dropdown-list';
+    
+    container.appendChild(input);
+    container.appendChild(dropdownList);
+    
+    // Replace the original select element
+    selectElement.style.display = 'none';
+    selectElement.parentNode.insertBefore(container, selectElement);
+    
+    let filteredOptions = [...options];
+    let allOptions = [...options];
+    
+    function renderOptions() {
+      dropdownList.innerHTML = '';
+      
+      if (filteredOptions.length === 0) {
+        const noResults = document.createElement('div');
+        noResults.className = 'no-results';
+        noResults.textContent = 'No results found';
+        dropdownList.appendChild(noResults);
+        return;
+      }
+      
+      filteredOptions.forEach(option => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.textContent = option.text;
+        item.dataset.value = option.value;
+        
+        if (option.value === selectElement.value) {
+          item.classList.add('selected');
+        }
+        
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          selectElement.value = option.value;
+          input.value = option.text;
+          container.classList.remove('active');
+          input.readOnly = true;
+          
+          // Remove selected and highlighted classes from all items
+          dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+            el.classList.remove('selected', 'highlighted');
+          });
+          item.classList.add('selected');
+          
+          // Trigger change event on original select
+          const event = new Event('change', { bubbles: true });
+          selectElement.dispatchEvent(event);
+        });
+        
+        dropdownList.appendChild(item);
+      });
+    }
+    
+    function filterOptions(searchTerm) {
+      const term = searchTerm.toLowerCase().trim();
+      if (term === '') {
+        filteredOptions = [...allOptions];
+      } else {
+        filteredOptions = allOptions.filter(option => 
+          option.text.toLowerCase().includes(term)
+        );
+      }
+      renderOptions();
+    }
+    
+    // Set initial value if select has a value
+    const initialSelectedOption = allOptions.find(opt => opt.value === selectElement.value);
+    if (initialSelectedOption) {
+      input.value = initialSelectedOption.text;
+    } else if (allOptions.length > 0 && allOptions[0].value === '') {
+      input.value = allOptions[0].text;
+    }
+    
+    // Input events
+    input.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (input.readOnly) {
+        input.readOnly = false;
+        input.value = '';
+        container.classList.add('active');
+        input.focus();
+        filterOptions('');
+      }
+    });
+    
+    input.addEventListener('input', (e) => {
+      if (!input.readOnly) {
+        filterOptions(e.target.value);
+      }
+    });
+    
+    // Handle clicks outside to close dropdown
+    document.addEventListener('click', (e) => {
+      if (!container.contains(e.target)) {
+        container.classList.remove('active');
+        input.readOnly = true;
+        
+        // Reset input value to selected option or placeholder
+        const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+        if (selectedOption) {
+          input.value = selectedOption.text;
+        } else {
+          input.value = allOptions[0]?.text || '';
+        }
+        
+        // Remove highlighted items
+        dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+          el.classList.remove('highlighted');
+        });
+      }
+    });
+    
+    // Add keyboard navigation
+    input.addEventListener('keydown', (e) => {
+      if (!container.classList.contains('active')) return;
+      
+      const items = dropdownList.querySelectorAll('.dropdown-item:not(.no-results)');
+      const currentSelected = dropdownList.querySelector('.dropdown-item.highlighted');
+      let currentIndex = currentSelected ? Array.from(items).indexOf(currentSelected) : -1;
+      
+      switch(e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          if (currentSelected) currentSelected.classList.remove('highlighted');
+          currentIndex = (currentIndex + 1) % items.length;
+          if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (currentSelected) currentSelected.classList.remove('highlighted');
+          currentIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+          if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (currentSelected) {
+            currentSelected.click();
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          container.classList.remove('active');
+          input.readOnly = true;
+          const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+          if (selectedOption) {
+            input.value = selectedOption.text;
+          } else {
+            input.value = allOptions[0]?.text || '';
+          }
+          break;
+      }
+    });
+    
+    // Initialize
+    renderOptions();
+    
+    return {
+      updateOptions: (newOptions) => {
+        allOptions = [...newOptions];
+        filteredOptions = [...newOptions];
+        renderOptions();
+        
+        // Update input value if needed
+        const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+        if (selectedOption) {
+          input.value = selectedOption.text;
+        } else if (allOptions.length > 0) {
+          input.value = allOptions[0].text;
+        }
+      },
+      container,
+      selectElement
+    };
+  }
+
   async function loadProducts(filters = {}) {
     let query = supabase
       .from("product_variety")
@@ -161,6 +354,7 @@
 
     const commoditySelect = document.getElementById('commodity_id');
     const unitSelect = document.getElementById('unit');
+    const supplierSelect = document.getElementById('supplier_id');
     const addNewUnitBtn = productFormContainer.querySelector('.add-new-btn');
 
     if (addNewUnitBtn) {
@@ -170,46 +364,144 @@
       });
     }
 
+    // Load and create searchable commodity dropdown
     const { data: commodities, error: commoditiesError } = await supabase.from('commodity').select('id, name');
     if (commoditiesError) {
         console.error("Error loading commodities:", commoditiesError);
         return;
     }
+    
+    commoditySelect.innerHTML = '<option value="">Select Commodity</option>';
+    const commodityOptions = [
+      { value: '', text: 'Select Commodity' },
+      ...commodities.map(item => ({
+        value: item.id,
+        text: item.name
+      }))
+    ];
+    
+    // Add options to original select
     commodities.forEach(item => {
         const option = document.createElement('option');
         option.value = item.id;
         option.textContent = item.name;
         commoditySelect.appendChild(option);
     });
+    
+    // Create searchable dropdown for commodity
+    const commodityDropdown = createSearchableDropdown(commoditySelect, commodityOptions, 'Search commodities...');
 
     commoditySelect.addEventListener('change', async (e) => {
-        await populateUnits(e.target.value);
+        await populateUnitsSearchable(e.target.value);
     });
 
-    const { data, error } = await supabase.from('supplier').select('id, name');
-    if (error) {
-        console.error("Error loading suppliers:", error);
+    // Load and create searchable supplier dropdown
+    const { data: suppliers, error: suppliersError } = await supabase.from('supplier').select('id, name');
+    if (suppliersError) {
+        console.error("Error loading suppliers:", suppliersError);
         return;
     }
 
-    const select = document.getElementById('supplier_id');
-    data.forEach(item => {
+    supplierSelect.innerHTML = '<option value="">Select Supplier</option>';
+    const supplierOptions = [
+      { value: '', text: 'Select Supplier' },
+      ...suppliers.map(item => ({
+        value: item.id,
+        text: item.name
+      }))
+    ];
+    
+    // Add options to original select
+    suppliers.forEach(item => {
         const option = document.createElement('option');
         option.value = item.id;
         option.textContent = item.name;
-        select.appendChild(option);
+        supplierSelect.appendChild(option);
     });
+    
+    // Create searchable dropdown for supplier
+    const supplierDropdown = createSearchableDropdown(supplierSelect, supplierOptions, 'Search suppliers...');
+
+    // Function to populate units with searchable dropdown
+    async function populateUnitsSearchable(commodityId, selectedUnit = null) {
+      const unitSelect = document.getElementById('unit');
+      
+      // Remove existing searchable dropdown if it exists
+      const existingUnitDropdown = unitSelect.previousElementSibling;
+      if (existingUnitDropdown && existingUnitDropdown.classList.contains('searchable-dropdown')) {
+        existingUnitDropdown.remove();
+        unitSelect.style.display = '';
+      }
+      
+      unitSelect.innerHTML = '';
+      
+      if (commodityId) {
+          const { data, error } = await supabase
+              .from('measurement_unit')
+              .select('unit_name')
+              .eq('commodity_id', commodityId);
+          if (error) {
+              console.error('Error loading measurement units:', error);
+          } else {
+              const unitOptions = [
+                { value: '', text: 'Select Unit' },
+                ...data.map(unit => ({
+                  value: unit.unit_name,
+                  text: unit.unit_name
+                }))
+              ];
+              
+              // Add options to original select
+              data.forEach(unit => {
+                  const option = document.createElement('option');
+                  option.value = unit.unit_name;
+                  option.textContent = unit.unit_name;
+                  unitSelect.appendChild(option);
+              });
+              
+              // Create searchable dropdown for units
+              createSearchableDropdown(unitSelect, unitOptions, 'Search units...');
+              
+              if (selectedUnit) {
+                  unitSelect.value = selectedUnit;
+                  // Update the searchable dropdown input display
+                  const selectedUnitOption = unitOptions.find(opt => opt.value === selectedUnit);
+                  if (selectedUnitOption) {
+                    const unitDropdownContainer = unitSelect.previousElementSibling;
+                    if (unitDropdownContainer && unitDropdownContainer.classList.contains('searchable-dropdown')) {
+                      const unitInput = unitDropdownContainer.querySelector('.dropdown-input');
+                      if (unitInput) unitInput.value = selectedUnitOption.text;
+                    }
+                  }
+              }
+          }
+      }
+    }
 
     if (product) {
         document.getElementById('product_id').value = product.id;
         document.getElementById('product_name').value = product.product_name;
         document.getElementById('variety_name').value = product.variety_name;
-        document.getElementById('commodity_id').value = product.commodity_id;
+        commoditySelect.value = product.commodity_id;
         
-        await populateUnits(product.commodity_id, product.unit);
+        // Update commodity dropdown display
+        const selectedCommodity = commodityOptions.find(opt => opt.value === product.commodity_id);
+        if (selectedCommodity && commodityDropdown.container) {
+          const commodityInput = commodityDropdown.container.querySelector('.dropdown-input');
+          if (commodityInput) commodityInput.value = selectedCommodity.text;
+        }
+        
+        await populateUnitsSearchable(product.commodity_id, product.unit);
 
         document.getElementById('rate_per_unit').value = product.rate_per_unit;
-        document.getElementById('supplier_id').value = product.supplier_id;
+        supplierSelect.value = product.supplier_id;
+        
+        // Update supplier dropdown display
+        const selectedSupplier = supplierOptions.find(opt => opt.value === product.supplier_id);
+        if (selectedSupplier && supplierDropdown.container) {
+          const supplierInput = supplierDropdown.container.querySelector('.dropdown-input');
+          if (supplierInput) supplierInput.value = selectedSupplier.text;
+        }
     }
 
     document.getElementById('new-product-modal').style.display = 'block';
@@ -263,23 +555,49 @@
 
   async function loadFilters() {
     const { data: suppliers, error: supplierError } = await supabase.from('supplier').select('id, name');
-    if (supplierError) console.error('Error loading suppliers:', supplierError); 
+    if (supplierError) console.error('Error loading suppliers:', supplierError);
     else {
       const select = document.getElementById('supplier-filter');
-      select.innerHTML = '<option value="">All</option>';
+      select.innerHTML = '<option value="">All Suppliers</option>';
+      
+      const supplierOptions = [
+        { value: '', text: 'All Suppliers' },
+        ...suppliers.map(item => ({
+          value: item.id,
+          text: item.name
+        }))
+      ];
+      
+      // Add options to original select
       suppliers.forEach(item => {
         select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
       });
+      
+      // Create searchable dropdown
+      createSearchableDropdown(select, supplierOptions, 'Search suppliers...');
     }
 
     const { data: commodities, error: commodityError } = await supabase.from('commodity').select('id, name');
-    if (commodityError) console.error('Error loading commodities:', commodityError); 
+    if (commodityError) console.error('Error loading commodities:', commodityError);
     else {
       const select = document.getElementById('commodity-filter');
-      select.innerHTML = '<option value="">All</option>';
+      select.innerHTML = '<option value="">All Commodities</option>';
+      
+      const commodityOptions = [
+        { value: '', text: 'All Commodities' },
+        ...commodities.map(item => ({
+          value: item.id,
+          text: item.name
+        }))
+      ];
+      
+      // Add options to original select
       commodities.forEach(item => {
         select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
       });
+      
+      // Create searchable dropdown
+      createSearchableDropdown(select, commodityOptions, 'Search commodities...');
     }
   }
 
@@ -344,6 +662,20 @@
         document.getElementById('product-name-filter').value = '';
         document.getElementById('supplier-filter').value = '';
         document.getElementById('commodity-filter').value = '';
+        
+        // Clear searchable dropdown inputs
+        const supplierDropdownInput = document.querySelector('#supplier-filter').previousElementSibling?.querySelector('.dropdown-input');
+        if (supplierDropdownInput) {
+          supplierDropdownInput.value = 'All Suppliers';
+          supplierDropdownInput.readOnly = true;
+        }
+        
+        const commodityDropdownInput = document.querySelector('#commodity-filter').previousElementSibling?.querySelector('.dropdown-input');
+        if (commodityDropdownInput) {
+          commodityDropdownInput.value = 'All Commodities';
+          commodityDropdownInput.readOnly = true;
+        }
+        
         loadProducts();
         updateFilterBadge();
       });
