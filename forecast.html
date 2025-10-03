@@ -45,6 +45,199 @@
     const supabase = createClient("https://sfknzqkiqxivzcualcau.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNma256cWtpcXhpdnpjdWFsY2F1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3OTU0ODksImV4cCI6MjA3MjM3MTQ4OX0.JKjOS9NRdbVH1UanfqmBeHmMSnlWlZtDr-5LdKw5YaA");
     let products = [];
 
+    // Searchable Dropdown Implementation
+    function createSearchableDropdown(selectElement, options, placeholder = 'Select an option') {
+      const container = document.createElement('div');
+      container.className = 'searchable-dropdown';
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'dropdown-input';
+      input.placeholder = placeholder;
+      input.readOnly = true;
+      
+      const dropdownList = document.createElement('div');
+      dropdownList.className = 'dropdown-list';
+      
+      container.appendChild(input);
+      container.appendChild(dropdownList);
+      
+      // Replace the original select element
+      selectElement.style.display = 'none';
+      selectElement.parentNode.insertBefore(container, selectElement);
+      
+      let filteredOptions = [...options];
+      let allOptions = [...options];
+      
+      function renderOptions() {
+        dropdownList.innerHTML = '';
+        
+        if (filteredOptions.length === 0) {
+          const noResults = document.createElement('div');
+          noResults.className = 'no-results';
+          noResults.textContent = 'No results found';
+          dropdownList.appendChild(noResults);
+          return;
+        }
+        
+        filteredOptions.forEach(option => {
+          const item = document.createElement('div');
+          item.className = 'dropdown-item';
+          item.textContent = option.text;
+          item.dataset.value = option.value;
+          
+          if (option.value === selectElement.value) {
+            item.classList.add('selected');
+          }
+          
+          item.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            selectElement.value = option.value;
+            input.value = option.text;
+            container.classList.remove('active');
+            input.readOnly = true;
+            
+            // Remove selected and highlighted classes from all items
+            dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+              el.classList.remove('selected', 'highlighted');
+            });
+            item.classList.add('selected');
+            
+            // Trigger change event on original select
+            const event = new Event('change', { bubbles: true });
+            selectElement.dispatchEvent(event);
+          });
+          
+          dropdownList.appendChild(item);
+        });
+      }
+      
+      function filterOptions(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        if (term === '') {
+          filteredOptions = [...allOptions];
+        } else {
+          filteredOptions = allOptions.filter(option => 
+            option.text.toLowerCase().includes(term)
+          );
+        }
+        renderOptions();
+      }
+      
+      // Set initial value if select has a value
+      const initialSelectedOption = allOptions.find(opt => opt.value === selectElement.value);
+      if (initialSelectedOption) {
+        input.value = initialSelectedOption.text;
+      } else if (allOptions.length > 0 && allOptions[0].value === '') {
+        input.value = allOptions[0].text;
+      }
+      
+      // Input events
+      input.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (input.readOnly) {
+          input.readOnly = false;
+          input.value = '';
+          container.classList.add('active');
+          input.focus();
+          filterOptions('');
+        }
+      });
+      
+      input.addEventListener('input', (e) => {
+        if (!input.readOnly) {
+          filterOptions(e.target.value);
+        }
+      });
+      
+      // Handle clicks outside to close dropdown
+      document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+          container.classList.remove('active');
+          input.readOnly = true;
+          
+          // Reset input value to selected option or placeholder
+          const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+          if (selectedOption) {
+            input.value = selectedOption.text;
+          } else {
+            input.value = allOptions[0]?.text || '';
+          }
+          
+          // Remove highlighted items
+          dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+            el.classList.remove('highlighted');
+          });
+        }
+      });
+      
+      // Add keyboard navigation
+      input.addEventListener('keydown', (e) => {
+        if (!container.classList.contains('active')) return;
+        
+        const items = dropdownList.querySelectorAll('.dropdown-item:not(.no-results)');
+        const currentSelected = dropdownList.querySelector('.dropdown-item.highlighted');
+        let currentIndex = currentSelected ? Array.from(items).indexOf(currentSelected) : -1;
+        
+        switch(e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (currentSelected) currentSelected.classList.remove('highlighted');
+            currentIndex = (currentIndex + 1) % items.length;
+            if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (currentSelected) currentSelected.classList.remove('highlighted');
+            currentIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+            if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+            break;
+          case 'Enter':
+            e.preventDefault();
+            if (currentSelected) {
+              currentSelected.click();
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            container.classList.remove('active');
+            input.readOnly = true;
+            const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+            if (selectedOption) {
+              input.value = selectedOption.text;
+            } else {
+              input.value = allOptions[0]?.text || '';
+            }
+            break;
+        }
+      });
+      
+      // Initialize
+      renderOptions();
+      
+      return {
+        updateOptions: (newOptions) => {
+          allOptions = [...newOptions];
+          filteredOptions = [...newOptions];
+          renderOptions();
+          
+          // Update input value if needed
+          const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+          if (selectedOption) {
+            input.value = selectedOption.text;
+          } else if (allOptions.length > 0) {
+            input.value = allOptions[0].text;
+          }
+        },
+        container,
+        selectElement
+      };
+    }
+
     function showToast(message, isSuccess = true) {
         const toast = document.getElementById('toast-message');
         toast.className = 'toast-notification'; // Reset classes
@@ -76,8 +269,9 @@
         .select(`*, product_variety ( product_name, variety_name )`)
         .order('date_of_sowing', { ascending: true });
 
-      if (filters.product_name) {
-        query = query.ilike('product_variety.product_name', `%${filters.product_name}%`);
+      if (filters.product_variety_id) {
+        // Filter by the actual product_variety_id field
+        query = query.eq('product_variety_id', filters.product_variety_id);
       }
 
       if (filters.year) {
@@ -101,6 +295,7 @@
       const { data, error } = await query;
 
       if (error) {
+        console.error('Query error:', error);
         document.getElementById("forecasts-list").innerHTML = `<p class="error-message">Error loading forecasts: ${error.message}</p>`;
         return;
       }
@@ -148,20 +343,52 @@
       document.getElementById('forecast-id').value = forecast ? forecast.id : '';
 
       const productSelect = document.getElementById('product_variety_id');
+      
+      // Remove existing searchable dropdown if it exists
+      const existingDropdown = productSelect.previousElementSibling;
+      if (existingDropdown && existingDropdown.classList.contains('searchable-dropdown')) {
+        existingDropdown.remove();
+        productSelect.style.display = '';
+      }
+      
       productSelect.innerHTML = '<option value="">Select a Product</option>';
+      
+      const productOptions = [
+        { value: '', text: 'Select a Product' },
+        ...products.map(p => ({
+          value: p.id,
+          text: `${p.product_name} - ${p.variety_name}`
+        }))
+      ];
+      
+      // Add options to original select
       products.forEach(p => {
         const option = document.createElement('option');
         option.value = p.id;
         option.textContent = `${p.product_name} - ${p.variety_name}`;
         productSelect.appendChild(option);
       });
+      
+      // Create searchable dropdown
+      const productDropdown = createSearchableDropdown(
+        productSelect,
+        productOptions,
+        'Search products...'
+      );
 
       if (forecast) {
         document.getElementById('modal-title').textContent = 'Edit Forecast';
-        document.getElementById('product_variety_id').value = forecast.product_variety_id;
+        productSelect.value = forecast.product_variety_id;
         document.getElementById('year').value = forecast.year;
         document.getElementById('forecast_qty').value = forecast.forecast_qty;
         document.getElementById('date_of_sowing').value = forecast.date_of_sowing;
+        
+        // Update the searchable dropdown input display
+        const selectedProduct = productOptions.find(opt => opt.value === forecast.product_variety_id);
+        if (selectedProduct && productDropdown.container) {
+          const productInput = productDropdown.container.querySelector('.dropdown-input');
+          if (productInput) productInput.value = selectedProduct.text;
+        }
       } else {
         document.getElementById('modal-title').textContent = 'Create New Forecast';
       }
@@ -216,6 +443,42 @@
 
     window.refreshEnlistmentStatus = refreshEnlistmentStatus;
 
+    async function initializeProductFilter() {
+      const productFilter = document.getElementById('product-name-filter');
+      
+      // Remove existing searchable dropdown if it exists
+      const existingDropdown = productFilter.previousElementSibling;
+      if (existingDropdown && existingDropdown.classList.contains('searchable-dropdown')) {
+        existingDropdown.remove();
+        productFilter.style.display = '';
+      }
+      
+      productFilter.innerHTML = '<option value="">All Products</option>';
+      
+      const productOptions = [
+        { value: '', text: 'All Products' },
+        ...products.map(p => ({
+          value: p.id,
+          text: `${p.product_name} - ${p.variety_name}`
+        }))
+      ];
+      
+      // Add options to original select
+      products.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.product_name} - ${p.variety_name}`;
+        productFilter.appendChild(option);
+      });
+      
+      // Create searchable dropdown
+      createSearchableDropdown(
+        productFilter,
+        productOptions,
+        'Search products...'
+      );
+    }
+
     window.onload = async () => {
       const loader = document.getElementById("loader");
       loader.style.display = "block";
@@ -231,6 +494,8 @@
         console.error("Failed to load products for form");
       } else {
         products = productData;
+        // Initialize the product filter dropdown
+        await initializeProductFilter();
       }
 
       document.getElementById('filter-toggle-btn').addEventListener('click', () => {
@@ -252,7 +517,7 @@
 
         const filters = {
 
-            product_name: document.getElementById('product-name-filter').value || null,
+            product_variety_id: document.getElementById('product-name-filter').value || null,
 
             year: document.getElementById('year-filter').value || null,
 
@@ -284,6 +549,13 @@
 
         document.getElementById('order-status-filter').value = '';
 
+        // Clear searchable dropdown input for product filter
+        const productDropdownInput = document.querySelector('#product-name-filter').previousElementSibling?.querySelector('.dropdown-input');
+        if (productDropdownInput) {
+          productDropdownInput.value = 'All Products';
+          productDropdownInput.readOnly = true;
+        }
+
         loadForecasts();
 
         updateFilterBadge();
@@ -296,7 +568,7 @@
 
         const filters = {
 
-            product_name: document.getElementById('product-name-filter').value,
+            product_variety_id: document.getElementById('product-name-filter').value,
 
             year: document.getElementById('year-filter').value,
 
@@ -310,7 +582,7 @@
 
         let activeFilters = 0;
 
-        if (filters.product_name) activeFilters++;
+        if (filters.product_variety_id) activeFilters++;
 
         if (filters.year) activeFilters++;
 
@@ -465,7 +737,9 @@
       <div id="filter-pane" class="filter-pane">
         <div class="filter-group">
           <label for="product-name-filter">Product Name</label>
-          <input type="text" id="product-name-filter" placeholder="Enter product name">
+          <select id="product-name-filter">
+            <option value="">All Products</option>
+          </select>
         </div>
         <div class="filter-group">
           <label for="year-filter">Year</label>
