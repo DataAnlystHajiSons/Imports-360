@@ -212,6 +212,199 @@
     let currentFilters = {};
     let allVerificationData = [];
 
+    // Searchable Dropdown Implementation
+    function createSearchableDropdown(selectElement, options, placeholder = 'Select an option') {
+      const container = document.createElement('div');
+      container.className = 'searchable-dropdown';
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'dropdown-input';
+      input.placeholder = placeholder;
+      input.readOnly = true;
+      
+      const dropdownList = document.createElement('div');
+      dropdownList.className = 'dropdown-list';
+      
+      container.appendChild(input);
+      container.appendChild(dropdownList);
+      
+      // Replace the original select element
+      selectElement.style.display = 'none';
+      selectElement.parentNode.insertBefore(container, selectElement);
+      
+      let filteredOptions = [...options];
+      let allOptions = [...options];
+      
+      function renderOptions() {
+        dropdownList.innerHTML = '';
+        
+        if (filteredOptions.length === 0) {
+          const noResults = document.createElement('div');
+          noResults.className = 'no-results';
+          noResults.textContent = 'No results found';
+          dropdownList.appendChild(noResults);
+          return;
+        }
+        
+        filteredOptions.forEach(option => {
+          const item = document.createElement('div');
+          item.className = 'dropdown-item';
+          item.textContent = option.text;
+          item.dataset.value = option.value;
+          
+          if (option.value === selectElement.value) {
+            item.classList.add('selected');
+          }
+          
+          item.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            selectElement.value = option.value;
+            input.value = option.text;
+            container.classList.remove('active');
+            input.readOnly = true;
+            
+            // Remove selected and highlighted classes from all items
+            dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+              el.classList.remove('selected', 'highlighted');
+            });
+            item.classList.add('selected');
+            
+            // Trigger change event on original select
+            const event = new Event('change', { bubbles: true });
+            selectElement.dispatchEvent(event);
+          });
+          
+          dropdownList.appendChild(item);
+        });
+      }
+      
+      function filterOptions(searchTerm) {
+        const term = searchTerm.toLowerCase().trim();
+        if (term === '') {
+          filteredOptions = [...allOptions];
+        } else {
+          filteredOptions = allOptions.filter(option => 
+            option.text.toLowerCase().includes(term)
+          );
+        }
+        renderOptions();
+      }
+      
+      // Set initial value if select has a value
+      const initialSelectedOption = allOptions.find(opt => opt.value === selectElement.value);
+      if (initialSelectedOption) {
+        input.value = initialSelectedOption.text;
+      } else if (allOptions.length > 0 && allOptions[0].value === '') {
+        input.value = allOptions[0].text;
+      }
+      
+      // Input events
+      input.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (input.readOnly) {
+          input.readOnly = false;
+          input.value = '';
+          container.classList.add('active');
+          input.focus();
+          filterOptions('');
+        }
+      });
+      
+      input.addEventListener('input', (e) => {
+        if (!input.readOnly) {
+          filterOptions(e.target.value);
+        }
+      });
+      
+      // Handle clicks outside to close dropdown
+      document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+          container.classList.remove('active');
+          input.readOnly = true;
+          
+          // Reset input value to selected option or placeholder
+          const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+          if (selectedOption) {
+            input.value = selectedOption.text;
+          } else {
+            input.value = allOptions[0]?.text || '';
+          }
+          
+          // Remove highlighted items
+          dropdownList.querySelectorAll('.dropdown-item').forEach(el => {
+            el.classList.remove('highlighted');
+          });
+        }
+      });
+      
+      // Add keyboard navigation
+      input.addEventListener('keydown', (e) => {
+        if (!container.classList.contains('active')) return;
+        
+        const items = dropdownList.querySelectorAll('.dropdown-item:not(.no-results)');
+        const currentSelected = dropdownList.querySelector('.dropdown-item.highlighted');
+        let currentIndex = currentSelected ? Array.from(items).indexOf(currentSelected) : -1;
+        
+        switch(e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (currentSelected) currentSelected.classList.remove('highlighted');
+            currentIndex = (currentIndex + 1) % items.length;
+            if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (currentSelected) currentSelected.classList.remove('highlighted');
+            currentIndex = currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+            if (items[currentIndex]) items[currentIndex].classList.add('highlighted');
+            break;
+          case 'Enter':
+            e.preventDefault();
+            if (currentSelected) {
+              currentSelected.click();
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            container.classList.remove('active');
+            input.readOnly = true;
+            const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+            if (selectedOption) {
+              input.value = selectedOption.text;
+            } else {
+              input.value = allOptions[0]?.text || '';
+            }
+            break;
+        }
+      });
+      
+      // Initialize
+      renderOptions();
+      
+      return {
+        updateOptions: (newOptions) => {
+          allOptions = [...newOptions];
+          filteredOptions = [...newOptions];
+          renderOptions();
+          
+          // Update input value if needed
+          const selectedOption = allOptions.find(opt => opt.value === selectElement.value);
+          if (selectedOption) {
+            input.value = selectedOption.text;
+          } else if (allOptions.length > 0) {
+            input.value = allOptions[0].text;
+          }
+        },
+        container,
+        selectElement
+      };
+    }
+
     async function loadVerificationList(filters = {}) {
       // Build query based on filters
       let query = supabase
@@ -344,9 +537,22 @@
       if (!cropsError && crops) {
         const cropSelect = document.getElementById('filter-crop');
         cropSelect.innerHTML = '<option value="">All Crops</option>';
+        
+        const cropOptions = [
+          { value: '', text: 'All Crops' },
+          ...crops.map(crop => ({
+            value: crop.id,
+            text: `${crop.product_name} - ${crop.variety_name}`
+          }))
+        ];
+        
+        // Add options to original select
         crops.forEach(crop => {
           cropSelect.innerHTML += `<option value="${crop.id}">${crop.product_name} - ${crop.variety_name}</option>`;
         });
+        
+        // Create searchable dropdown
+        createSearchableDropdown(cropSelect, cropOptions, 'Search crops...');
       }
 
       // Load exporters for filter dropdown
@@ -358,9 +564,22 @@
       if (!exportersError && exporters) {
         const exporterSelect = document.getElementById('filter-exporter');
         exporterSelect.innerHTML = '<option value="">All Exporters</option>';
+        
+        const exporterOptions = [
+          { value: '', text: 'All Exporters' },
+          ...exporters.map(exporter => ({
+            value: exporter.id,
+            text: exporter.name
+          }))
+        ];
+        
+        // Add options to original select
         exporters.forEach(exporter => {
           exporterSelect.innerHTML += `<option value="${exporter.id}">${exporter.name}</option>`;
         });
+        
+        // Create searchable dropdown
+        createSearchableDropdown(exporterSelect, exporterOptions, 'Search exporters...');
       }
     }
 
@@ -390,6 +609,19 @@
       document.getElementById('filter-exporter').value = '';
       document.getElementById('filter-date-from').value = '';
       document.getElementById('filter-date-to').value = '';
+      
+      // Clear searchable dropdown inputs
+      const cropDropdownInput = document.querySelector('#filter-crop').previousElementSibling?.querySelector('.dropdown-input');
+      if (cropDropdownInput) {
+        cropDropdownInput.value = 'All Crops';
+        cropDropdownInput.readOnly = true;
+      }
+      
+      const exporterDropdownInput = document.querySelector('#filter-exporter').previousElementSibling?.querySelector('.dropdown-input');
+      if (exporterDropdownInput) {
+        exporterDropdownInput.value = 'All Exporters';
+        exporterDropdownInput.readOnly = true;
+      }
       
       currentFilters = {};
       loadVerificationList();
@@ -471,22 +703,64 @@
         messageDiv.innerHTML = `<p class="error-message">Error loading crops: ${cropsError.message}</p>`;
         return;
       }
+      
       const cropSelect = document.getElementById('crop_id');
+      
+      // Remove existing searchable dropdown if it exists
+      const existingCropDropdown = cropSelect.previousElementSibling;
+      if (existingCropDropdown && existingCropDropdown.classList.contains('searchable-dropdown')) {
+        existingCropDropdown.remove();
+        cropSelect.style.display = '';
+      }
+      
       cropSelect.innerHTML = '<option value="">Select Crop</option>';
+      const cropOptions = [
+        { value: '', text: 'Select Crop' },
+        ...crops.map(crop => ({
+          value: crop.id,
+          text: `${crop.product_name} - ${crop.variety_name}`
+        }))
+      ];
+      
+      // Add options to original select
       crops.forEach(crop => {
         cropSelect.innerHTML += `<option value="${crop.id}">${crop.product_name} - ${crop.variety_name}</option>`;
       });
+      
+      // Create searchable dropdown for crops
+      const cropDropdown = createSearchableDropdown(cropSelect, cropOptions, 'Search crops...');
 
       const { data: exporters, error: exportersError } = await supabase.from('supplier').select('id, name');
       if (exportersError) {
         messageDiv.innerHTML = `<p class="error-message">Error loading exporters: ${exportersError.message}</p>`;
         return;
       }
+      
       const exporterSelect = document.getElementById('exporter_id');
+      
+      // Remove existing searchable dropdown if it exists
+      const existingExporterDropdown = exporterSelect.previousElementSibling;
+      if (existingExporterDropdown && existingExporterDropdown.classList.contains('searchable-dropdown')) {
+        existingExporterDropdown.remove();
+        exporterSelect.style.display = '';
+      }
+      
       exporterSelect.innerHTML = '<option value="">Select Exporter</option>';
+      const exporterOptions = [
+        { value: '', text: 'Select Exporter' },
+        ...exporters.map(exporter => ({
+          value: exporter.id,
+          text: exporter.name
+        }))
+      ];
+      
+      // Add options to original select
       exporters.forEach(exporter => {
         exporterSelect.innerHTML += `<option value="${exporter.id}">${exporter.name}</option>`;
       });
+      
+      // Create searchable dropdown for exporters
+      const exporterDropdown = createSearchableDropdown(exporterSelect, exporterOptions, 'Search exporters...');
 
       if (id) {
         const { data, error } = await supabase
@@ -504,8 +778,23 @@
         document.getElementById('hs_code').value = data.hs_code;
         document.getElementById('submission_date').value = data.submission_date;
         document.getElementById('description').value = data.description;
-        document.getElementById('crop_id').value = data.crop_id;
-        document.getElementById('exporter_id').value = data.exporter_id;
+        
+        // Set values for the searchable dropdowns
+        cropSelect.value = data.crop_id;
+        exporterSelect.value = data.exporter_id;
+        
+        // Update the input displays
+        const selectedCrop = cropOptions.find(opt => opt.value === data.crop_id);
+        if (selectedCrop && cropDropdown.container) {
+          const cropInput = cropDropdown.container.querySelector('.dropdown-input');
+          if (cropInput) cropInput.value = selectedCrop.text;
+        }
+        
+        const selectedExporter = exporterOptions.find(opt => opt.value === data.exporter_id);
+        if (selectedExporter && exporterDropdown.container) {
+          const exporterInput = exporterDropdown.container.querySelector('.dropdown-input');
+          if (exporterInput) exporterInput.value = selectedExporter.text;
+        }
       } else {
         document.getElementById('verification-form').reset();
         document.getElementById('item_id').value = '';
@@ -601,6 +890,62 @@
           loader.style.display = "none";
       }
     };
+
+    // Initialize sidebar functionality
+    document.addEventListener('DOMContentLoaded', () => {
+      const sidebar = document.querySelector('.sidebar');
+      const sidebarToggle = document.querySelector('.sidebar-toggle');
+      const navLinks = document.querySelectorAll('.nav-link');
+      const hasSubmenus = document.querySelectorAll('.has-submenu');
+
+      const mediaQuery = window.matchMedia('(max-width: 768px)');
+
+      function handleMediaQueryChange(e) {
+        if (e.matches) {
+          sidebar.classList.remove('collapsed');
+          sidebar.classList.remove('open');
+        } else {
+          sidebar.classList.remove('open');
+        }
+      }
+
+      handleMediaQueryChange(mediaQuery);
+      mediaQuery.addListener(handleMediaQueryChange);
+
+      sidebarToggle.addEventListener('click', () => {
+        if (mediaQuery.matches) {
+          sidebar.classList.toggle('open');
+        } else {
+          sidebar.classList.toggle('collapsed');
+        }
+      });
+
+      hasSubmenus.forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          const submenu = item.nextElementSibling;
+          if (submenu && submenu.classList.contains('submenu')) {
+            submenu.classList.toggle('open');
+            item.classList.toggle('open');
+          }
+        });
+      });
+
+      const currentPath = window.location.pathname.split('/').pop();
+      navLinks.forEach(link => {
+        if (link.href.split('/').pop() === currentPath) {
+          link.classList.add('active');
+          let parentSubmenu = link.closest('.submenu');
+          if (parentSubmenu) {
+            parentSubmenu.classList.add('open');
+            let parentHasSubmenu = parentSubmenu.previousElementSibling;
+            if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
+              parentHasSubmenu.classList.add('open');
+            }
+          }
+        }
+      });
+    });
   </script>
 </head>
 <body>
@@ -833,61 +1178,7 @@
     </div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const sidebar = document.querySelector('.sidebar');
-      const sidebarToggle = document.querySelector('.sidebar-toggle');
-      const navLinks = document.querySelectorAll('.nav-link');
-      const hasSubmenus = document.querySelectorAll('.has-submenu');
-
-      const mediaQuery = window.matchMedia('(max-width: 768px)');
-
-      function handleMediaQueryChange(e) {
-        if (e.matches) {
-          sidebar.classList.remove('collapsed');
-          sidebar.classList.remove('open');
-        } else {
-          sidebar.classList.remove('open');
-        }
-      }
-
-      handleMediaQueryChange(mediaQuery);
-      mediaQuery.addListener(handleMediaQueryChange);
-
-      sidebarToggle.addEventListener('click', () => {
-        if (mediaQuery.matches) {
-          sidebar.classList.toggle('open');
-        } else {
-          sidebar.classList.toggle('collapsed');
-        }
-      });
-
-      hasSubmenus.forEach(item => {
-        item.addEventListener('click', (e) => {
-          e.preventDefault();
-          const submenu = item.nextElementSibling;
-          if (submenu && submenu.classList.contains('submenu')) {
-            submenu.classList.toggle('open');
-            item.classList.toggle('open');
-          }
-        });
-      });
-
-      const currentPath = window.location.pathname.split('/').pop();
-      navLinks.forEach(link => {
-        if (link.href.split('/').pop() === currentPath) {
-          link.classList.add('active');
-          let parentSubmenu = link.closest('.submenu');
-          if (parentSubmenu) {
-            parentSubmenu.classList.add('open');
-            let parentHasSubmenu = parentSubmenu.previousElementSibling;
-            if (parentHasSubmenu && parentHasSubmenu.classList.contains('has-submenu')) {
-              parentHasSubmenu.classList.add('open');
-            }
-          }
-        }
-      });
-    });
-  </script>
+</body>
+</html>
 </body>
 </html>
