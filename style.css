@@ -1234,6 +1234,128 @@ h2.stage-header {
   padding: 16px 8px;
 }
 
+/* Searchable Dropdown Styles */
+.searchable-dropdown {
+  position: relative;
+  width: 100%;
+  display: block;
+}
+
+.searchable-dropdown.active .dropdown-list {
+  display: block;
+}
+
+.searchable-dropdown .dropdown-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--secondary-color);
+  border-radius: 4px;
+  background-color: var(--primary-color);
+  font-size: 16px;
+  cursor: pointer;
+  box-sizing: border-box;
+  color: var(--text-primary-color);
+}
+
+.searchable-dropdown .dropdown-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
+  cursor: text;
+}
+
+.searchable-dropdown .dropdown-input:read-only {
+  cursor: pointer;
+}
+
+.searchable-dropdown .dropdown-input::placeholder {
+  color: var(--text-secondary-color);
+  opacity: 1;
+}
+
+.searchable-dropdown .dropdown-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--primary-color);
+  border: 1px solid var(--secondary-color);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin-top: 2px;
+}
+
+.searchable-dropdown .dropdown-item {
+  padding: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--secondary-color);
+  transition: background-color 0.2s ease;
+  color: var(--text-primary-color);
+}
+
+.searchable-dropdown .dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.searchable-dropdown .dropdown-item:hover,
+.searchable-dropdown .dropdown-item.highlighted {
+  background-color: rgba(124, 58, 237, 0.1);
+}
+
+.searchable-dropdown .dropdown-item.selected {
+  background-color: rgba(124, 58, 237, 0.2);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.searchable-dropdown .no-results {
+  padding: 10px;
+  text-align: center;
+  color: var(--text-secondary-color);
+  font-style: italic;
+}
+
+/* Ensure proper spacing in the modal form */
+.product-form-item .searchable-dropdown {
+  margin-bottom: 0;
+}
+
+.product-form-item > div {
+  margin-bottom: 15px;
+}
+
+/* Fix input group layout with searchable dropdown */
+.input-group {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.input-group .searchable-dropdown {
+  flex-grow: 1;
+  margin-bottom: 0;
+}
+
+.input-group .add-new-btn {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 40px;
+  height: auto;
+}
+
+.input-group .add-new-btn:hover {
+  background: var(--highlight-color);
+}
+
 .profile-action {
   display: flex;
   align-items: center;
