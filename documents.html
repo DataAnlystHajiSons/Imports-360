@@ -309,18 +309,6 @@
               </td>
               <td>${new Date(doc.uploaded_at).toLocaleString()}</td>
               <td>
-                <div style="font-family: monospace; font-size: 11px; color: #666; margin-bottom: 5px;">
-                  ${fileName}
-                </div>
-                ${doc.entity_name && dimension !== 'shipment' ? 
-                  `<div style="font-size: 10px; color: #999;">
-                    ${dimension === 'supplier' ? 'Supplier' : 
-                      dimension === 'bank' ? 'Bank' :
-                      dimension === 'clearing_agent' ? 'Agent' : 'Entity'}: ${doc.entity_name}
-                  </div>` : ''
-                }
-              </td>
-              <td>
                 <div style="display: flex; gap: 5px;">
                   <button onclick="viewDocument('${doc.id}')" class="button" style="
                     background: var(--accent-color); 
@@ -682,12 +670,11 @@
                 <th>Shipment</th>
                 <th>Document Type</th>
                 <th>Uploaded At</th>
-                <th>File Name</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="documents-table-body">
-              <tr><td colspan="5">Please select a dimension and entity to view documents.</td></tr>
+              <tr><td colspan="4">Please select a dimension and entity to view documents.</td></tr>
             </tbody>
           </table>
         </div>
