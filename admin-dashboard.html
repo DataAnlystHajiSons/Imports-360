@@ -898,11 +898,13 @@
               });
             }
             
+            document.getElementById('status-filter').value = 'active';
             await Promise.all([
               loadDashboardStats(),
-              loadShipments(),
+              loadShipments('', { status: 'active' }),
               loadFilterOptions()
             ]);
+            updateFilterBadge();
             
             // Initialize insights section with real data
             await initializeInsightsSection();
@@ -984,7 +986,17 @@
 
         const searchInput = document.getElementById('shipment-search');
         searchInput.addEventListener('input', debounce((e) => {
-          loadShipments(e.target.value);
+          const filters = {
+                supplier_id: document.getElementById('supplier-filter').value || null,
+                clearing_agent_id: document.getElementById('clearing-agent-filter').value || null,
+                bank_id: document.getElementById('bank-filter').value || null,
+                status: document.getElementById('status-filter').value || null,
+                commodity: document.getElementById('commodity-filter').value || null,
+                lc_number: document.getElementById('lc-number-filter').value || null,
+                product_name: document.getElementById('product-name-filter').value || null,
+                variety_name: document.getElementById('variety-name-filter').value || null
+            };
+          loadShipments(e.target.value, filters);
         }, 300));
 
         document.getElementById('add-product-btn').addEventListener('click', addProductForm);
@@ -994,9 +1006,16 @@
           const messageDiv = document.getElementById('create-shipment-message');
           const { data: { user } } = await supabase.auth.getUser();
 
-          // 1. Create the shipment
+          // 1. Generate reference code and create the shipment
           const shipmentType = document.querySelector('[name="type"]').value;
-          const reference_code = `${shipmentType}-${Date.now()}`;
+          
+          const { data: reference_code, error: refError } = await supabase.rpc('get_next_shipment_reference', { p_shipment_type: shipmentType });
+
+          if (refError) {
+            messageDiv.innerHTML = `<p class="error-message">Error generating reference code: ${refError.message}</p>`;
+            return;
+          }
+
           const { data: shipment, error: shipmentError } = await supabase
             .from('shipment')
             .insert({ reference_code: reference_code, created_by: user.id, type: shipmentType })
