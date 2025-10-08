@@ -86,9 +86,9 @@
         "ip_number": {
             table: "ip_number",
             fields: [
-                { name: "ip_reference", type: "text", label: "IP Reference" },
                 { name: "issued_date", type: "date", label: "Issued Date" },
-                { name: "file_url", type: "text", label: "File URL", readonly: true }
+                { name: "file_url", type: "text", label: "File URL", readonly: true },
+                { name: "references", type: "jsonb", label: "IP References" }
             ]
         },
         "lc_opening": {
@@ -718,7 +718,6 @@
         let data, error;
         
         if (currentStageData.stageName === 'freight_query') {
-            // For freight_query, get the most recent record since it uses INSERT
             const { data: queryData, error: queryError } = await supabase
                 .from(config.table)
                 .select(selectString)
@@ -726,11 +725,9 @@
                 .order('sent_at', { ascending: false })
                 .limit(1);
             
-            // Handle single result properly
             data = queryData && queryData.length > 0 ? queryData[0] : null;
             error = queryError;
         } else {
-            // For other stages, use the regular approach
             const { data: queryData, error: queryError } = await supabase
                 .from(config.table)
                 .select(selectString)
@@ -749,44 +746,78 @@
 
         table.innerHTML = ''; // Clear previous data
 
-        for (const field of currentStageData.config.fields) {
-            let value = currentStageData.details[field.name];
-            let displayValue = value;
+        if (currentStageData.stageName === 'ip_number') {
+            // Custom rendering for ip_number stage
+            const issuedDateField = currentStageData.config.fields.find(f => f.name === 'issued_date');
+            const fileUrlField = currentStageData.config.fields.find(f => f.name === 'file_url');
 
-            // Handle null values properly
-            if (value === null || value === undefined || value === 'null') {
-                displayValue = 'N/A';
+            let issuedDateValue = currentStageData.details.issued_date || 'N/A';
+            let fileUrlValue = 'N/A';
+            if (currentStageData.details.file_url) {
+                fileUrlValue = `<a href="${currentStageData.details.file_url}" target="_blank" class="button button-secondary">View Document</a>`;
             }
 
-            if (field.fk) {
-                const relationName = field.fk.relation;
-                const relatedData = currentStageData.details[relationName];
-                if (relatedData && relatedData[field.fk.displayColumn]) {
-                    displayValue = relatedData[field.fk.displayColumn];
-                } else if (value === null || value === undefined || value === 'null') {
-                    displayValue = 'N/A';
-                }
-            }
+            table.innerHTML += `<tr><td>${issuedDateField.label}</td><td>${issuedDateValue}</td></tr>`;
+            table.innerHTML += `<tr><td>${fileUrlField.label}</td><td>${fileUrlValue}</td></tr>`;
 
-            if (field.type === 'boolean') {
-                displayValue = value ? 'Yes' : 'No';
-            }
+            const references = currentStageData.details.references || [];
+            if (references.length > 0) {
+                const productVarietyIds = references.map(r => r.product_variety_id);
+                const { data: products, error } = await supabase
+                    .from('product_variety')
+                    .select('id, product_name, variety_name')
+                    .in('id', productVarietyIds);
 
-            if (field.name.endsWith('_url') || field.name.endsWith('_doc')) {
-                if (value && value !== 'null') {
-                    displayValue = `<a href="${value}" target="_blank" class="button button-secondary">View Document</a>`;
+                if (error) {
+                    showMessage('stage-modal-message', `Error loading products: ${error.message}`, true);
                 } else {
-                    displayValue = 'N/A';
+                    let referencesHtml = '<tr><td colspan="2"><h3>IP References</h3></td></tr>';
+                    references.forEach(ref => {
+                        const product = products.find(p => p.id === ref.product_variety_id);
+                        const productName = product ? `${product.product_name} - ${product.variety_name}` : 'Unknown Product';
+                        referencesHtml += `<tr><td>${productName}</td><td>${ref.ip_reference}</td></tr>`;
+                    });
+                    table.innerHTML += referencesHtml;
                 }
             }
+        } else {
+            for (const field of currentStageData.config.fields) {
+                let value = currentStageData.details[field.name];
+                let displayValue = value;
 
-            const row = table.insertRow();
-            row.innerHTML = `<td>${field.label}</td><td>${displayValue || 'N/A'}</td>`;
+                if (value === null || value === undefined || value === 'null') {
+                    displayValue = 'N/A';
+                }
+
+                if (field.fk) {
+                    const relationName = field.fk.relation;
+                    const relatedData = currentStageData.details[relationName];
+                    if (relatedData && relatedData[field.fk.displayColumn]) {
+                        displayValue = relatedData[field.fk.displayColumn];
+                    } else if (value === null || value === undefined || value === 'null') {
+                        displayValue = 'N/A';
+                    }
+                }
+
+                if (field.type === 'boolean') {
+                    displayValue = value ? 'Yes' : 'No';
+                }
+
+                if (field.name.endsWith('_url') || field.name.endsWith('_doc')) {
+                    if (value && value !== 'null') {
+                        displayValue = `<a href="${value}" target="_blank" class="button button-secondary">View Document</a>`;
+                    } else {
+                        displayValue = 'N/A';
+                    }
+                }
+
+                const row = table.insertRow();
+                row.innerHTML = `<td>${field.label}</td><td>${displayValue || 'N/A'}</td>`;
+            }
         }
 
         const buttonContainer = viewContainer.querySelector('.button-container');
         if (buttonContainer) {
-            // Clear existing buttons before adding new ones
             buttonContainer.innerHTML = '<button id="edit-stage-button" onclick="renderStageEdit()">Edit</button>';
         }
 
@@ -853,60 +884,99 @@
         const config = currentStageData.config;
         const data = currentStageData.details;
 
-        // Debug the shipment ID  
-        if (currentStageData.stageName === 'freight_query') {
-            console.log('🔍 Freight Query Debug - renderStageEdit:');
-            console.log('📊 Data loaded:', data);
-        }
+        if (currentStageData.stageName === 'ip_number') {
+            // Custom rendering for ip_number stage
+            const issuedDateField = config.fields.find(f => f.name === 'issued_date');
+            
+            form.innerHTML += `
+                <div class="form-field">
+                    <label for="issued_date">${issuedDateField.label}:</label>
+                    <input type="date" id="issued_date" name="issued_date" value="${data.issued_date || ''}">
+                </div>
+            `;
 
-        for (const field of config.fields) {
-            let value = data ? data[field.name] : '';
-            
-            // Properly handle null values from database
-            if (value === null || value === undefined || value === 'null') {
-                value = '';
+            // Get products for the shipment
+            const { data: shipmentProducts, error } = await supabase
+                .from('shipment_products')
+                .select('*, product_variety(*)')
+                .eq('shipment_id', shipmentId);
+
+            if (error) {
+                showMessage('stage-modal-message', `Error loading products: ${error.message}`, true);
+                return;
             }
-            
-            // Fix datetime-local format for display
-            if (field.type === 'datetime-local' && value) {
-                // Convert ISO string to datetime-local format (YYYY-MM-DDTHH:MM)
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                    // Format to YYYY-MM-DDTHH:MM format required by datetime-local input
-                    const year = date.getFullYear();
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    const hours = String(date.getHours()).padStart(2, '0');
-                    const minutes = String(date.getMinutes()).padStart(2, '0');
-                    value = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+            // Render a list of products with input fields for IP references
+            let referencesHtml = '<h3>IP References</h3>';
+            const existingReferences = data.references || [];
+
+            shipmentProducts.forEach(sp => {
+                const productVariety = sp.product_variety;
+                const existingRef = existingReferences.find(ref => ref.product_variety_id === productVariety.id);
+                referencesHtml += `
+                    <div class="form-field">
+                        <label for="ip_ref_${productVariety.id}">${productVariety.product_name} - ${productVariety.variety_name}</label>
+                        <input type="text" id="ip_ref_${productVariety.id}" name="ip_reference" data-product-variety-id="${productVariety.id}" value="${existingRef ? existingRef.ip_reference : ''}">
+                    </div>
+                `;
+            });
+            form.innerHTML += referencesHtml;
+        } else {
+            // Debug the shipment ID  
+            if (currentStageData.stageName === 'freight_query') {
+                console.log('🔍 Freight Query Debug - renderStageEdit:');
+                console.log('📊 Data loaded:', data);
+            }
+
+            for (const field of config.fields) {
+                let value = data ? data[field.name] : '';
+                
+                // Properly handle null values from database
+                if (value === null || value === undefined || value === 'null') {
+                    value = '';
                 }
+                
+                // Fix datetime-local format for display
+                if (field.type === 'datetime-local' && value) {
+                    // Convert ISO string to datetime-local format (YYYY-MM-DDTHH:MM)
+                    const date = new Date(value);
+                    if (!isNaN(date.getTime())) {
+                        // Format to YYYY-MM-DDTHH:MM format required by datetime-local input
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        value = `${year}-${month}-${day}T${hours}:${minutes}`;
+                    }
+                }
+                
+                const formField = document.createElement('div');
+                formField.classList.add('form-field');
+                let fieldHtml = `<label for="${field.name}">${field.label}:</label>`;
+                if (field.type === 'select') {
+                    fieldHtml += `<select id="${field.name}" name="${field.name}">`;
+                    field.options.forEach(option => {
+                        fieldHtml += `<option value="${option}" ${value === option ? 'selected' : ''}>${option}</option>`;
+                    });
+                    fieldHtml += `</select>`;
+                } else if (field.fk) {
+                    fieldHtml += `<select id="${field.name}" name="${field.name}"></select>`;
+                } else if (field.type === 'boolean') {
+                    fieldHtml += `<label class="switch">
+                                        <input type="checkbox" id="${field.name}" name="${field.name}" ${value ? 'checked' : ''}>
+                                        <span class="slider round"></span>
+                                    </label>`;
+                } else if (field.type === 'jsonb') {
+                    fieldHtml += `<textarea id="${field.name}" name="${field.name}">${value ? JSON.stringify(value, null, 2) : ''}</textarea>`;
+                } else if (field.type === 'textarea') {
+                    fieldHtml += `<textarea id="${field.name}" name="${field.name}" rows="4">${value || ''}</textarea>`;
+                } else {
+                    fieldHtml += `<input type="${field.type}" id="${field.name}" name="${field.name}" value="${value || ''}" ${field.readonly ? 'readonly' : ''}>`;
+                }
+                formField.innerHTML = fieldHtml;
+                form.appendChild(formField);
             }
-            
-            const formField = document.createElement('div');
-            formField.classList.add('form-field');
-            let fieldHtml = `<label for="${field.name}">${field.label}:</label>`;
-            if (field.type === 'select') {
-                fieldHtml += `<select id="${field.name}" name="${field.name}">`;
-                field.options.forEach(option => {
-                    fieldHtml += `<option value="${option}" ${value === option ? 'selected' : ''}>${option}</option>`;
-                });
-                fieldHtml += `</select>`;
-            } else if (field.fk) {
-                fieldHtml += `<select id="${field.name}" name="${field.name}"></select>`;
-            } else if (field.type === 'boolean') {
-                fieldHtml += `<label class="switch">
-                                    <input type="checkbox" id="${field.name}" name="${field.name}" ${value ? 'checked' : ''}>
-                                    <span class="slider round"></span>
-                                </label>`;
-            } else if (field.type === 'jsonb') {
-                fieldHtml += `<textarea id="${field.name}" name="${field.name}">${value ? JSON.stringify(value, null, 2) : ''}</textarea>`;
-            } else if (field.type === 'textarea') {
-                fieldHtml += `<textarea id="${field.name}" name="${field.name}" rows="4">${value || ''}</textarea>`;
-            } else {
-                fieldHtml += `<input type="${field.type}" id="${field.name}" name="${field.name}" value="${value || ''}" ${field.readonly ? 'readonly' : ''}>`;
-            }
-            formField.innerHTML = fieldHtml;
-            form.appendChild(formField);
         }
 
         // Populate foreign key dropdowns and special fields
@@ -1055,45 +1125,53 @@
                 shipment_id: shipmentId
             };
 
-            const fileUrlField = config.fields.find(f => f.name.endsWith('_url') || f.name.endsWith('_doc'));
-            let file_url = null;
-            if (fileUrlField && currentStageData.details) {
-                file_url = currentStageData.details[fileUrlField.name] || null;
-            }
+            if (stageName === 'ip_number') {
+                const references = [];
+                const ipReferenceInputs = form.querySelectorAll('input[name="ip_reference"]');
+                ipReferenceInputs.forEach(input => {
+                    references.push({
+                        product_variety_id: input.dataset.productVarietyId,
+                        ip_reference: input.value
+                    });
+                });
+                updates['references'] = references;
+                updates['issued_date'] = formData.get('issued_date');
+            } else {
+                const fileUrlField = config.fields.find(f => f.name.endsWith('_url') || f.name.endsWith('_doc'));
+                for (const field of config.fields) {
+                    const key = field.name;
+                    if (key === (fileUrlField ? fileUrlField.name : '')) continue;
 
-            for (const field of config.fields) {
-                const key = field.name;
-                if (key === (fileUrlField ? fileUrlField.name : '')) continue;
+                    let value = formData.get(key);
 
-                let value = formData.get(key);
-
-                if (field.type === 'boolean') {
-                    updates[key] = form.querySelector(`[name="${key}"]`).checked;
-                } else if (field.type === 'datetime-local') {
-                    if (value && value !== 'null' && value !== '') {
-                        const date = new Date(value);
-                        updates[key] = date.toISOString();
-                    } else {
-                        updates[key] = null;
-                    }
-                } else if (field.type === 'jsonb') {
-                    try {
-                        updates[key] = value && value !== 'null' && value !== '' ? JSON.parse(value) : null;
-                    } catch (e) {
-                        showMessage("stage-modal-message", `<p class="error-message">Invalid JSON in ${field.label}</p>`);
-                        return;
-                    }
-                } else if (field.type === 'uuid' && (!value || value === 'null' || value === '')) {
-                    if (field.fk) {
-                        updates[key] = null;
-                    } else {
-                        continue;
-                    }
-                } else if (field.type !== 'file') {
-                    if (value === null || value === undefined || value === '' || value === 'null') {
-                        updates[key] = null;
-                    } else {
-                        updates[key] = value;
+                    if (field.type === 'boolean') {
+                        updates[key] = form.querySelector(`[name="${key}"]`).checked;
+                    } else if (field.type === 'datetime-local') {
+                        if (value && value !== 'null' && value !== '') {
+                            const date = new Date(value);
+                            updates[key] = date.toISOString();
+                        } else {
+                            updates[key] = null;
+                        }
+                    } else if (field.type === 'jsonb') {
+                        try {
+                            updates[key] = value && value !== 'null' && value !== '' ? JSON.parse(value) : null;
+                        } catch (e) {
+                            showMessage("stage-modal-message", `<p class="error-message">Invalid JSON in ${field.label}</p>`);
+                            return;
+                        }
+                    } else if (field.type === 'uuid' && (!value || value === 'null' || value === '')) {
+                        if (field.fk) {
+                            updates[key] = null;
+                        } else {
+                            continue;
+                        }
+                    } else if (field.type !== 'file') {
+                        if (value === null || value === undefined || value === '' || value === 'null') {
+                            updates[key] = null;
+                        } else {
+                            updates[key] = value;
+                        }
                     }
                 }
             }
@@ -1113,8 +1191,9 @@
                 }
 
                 const { data: publicUrlData } = supabase.storage.from('shipment-docs').getPublicUrl(data.path);
-                file_url = publicUrlData.publicUrl;
+                const file_url = publicUrlData.publicUrl;
 
+                const fileUrlField = config.fields.find(f => f.name.endsWith('_url') || f.name.endsWith('_doc'));
                 if (file_url && fileUrlField) {
                     updates[fileUrlField.name] = file_url;
 
@@ -1141,14 +1220,9 @@
 
             let query;
             if (stageName === 'freight_query') {
-                // Check if we're editing existing data or creating new
                 if (currentStageData.details && currentStageData.details.id) {
-                    // We have existing data with an ID, so UPDATE the existing record
-                    console.log('🔄 FREIGHT QUERY: Updating existing record with ID:', currentStageData.details.id);
                     query = supabase.from(config.table).update(updates).eq('id', currentStageData.details.id);
                 } else {
-                    // No existing data, so INSERT new record
-                    console.log('🆕 FREIGHT QUERY: Inserting new record');
                     query = supabase.from(config.table).insert(updates);
                 }
             } else {
@@ -1165,9 +1239,6 @@
                 return;
             }
 
-            console.log('✅ FREIGHT QUERY: Database operation successful!', queryResult);
-            console.log('📝 Data that was saved:', updates);
-
             const { data: checklistData, error: checklistError } = await supabase
                 .from('v_shipment_stage_checklist')
                 .select('current_stage')
@@ -1179,21 +1250,13 @@
                 return;
             }
             
-            console.log('🔍 STAGE LOGIC DEBUG:');
-            console.log('🔍 Stage we just saved:', stageName);
-            console.log('🔍 Current stage from checklist:', checklistData.current_stage);
-            
-            // Only try to advance if we're editing the current active stage
             if (stageName !== checklistData.current_stage) {
-                console.log('🔍 Not advancing: editing historical stage, not current active stage');
                 closeModal();
-                await initializeTracker(); // Make sure tracker refreshes to show updated data
+                await initializeTracker();
                 showToast(`${stageName.replace(/_/g, ' ')} data updated successfully!`, true);
                 return;
             }
             
-            console.log('🔍 Advancing because we edited the current active stage');
-
             if (stageName === 'bills' && checklistData.current_stage !== 'warehouse') {
                 closeModal();
                 initializeTracker();
